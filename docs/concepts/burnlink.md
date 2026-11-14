@@ -60,24 +60,25 @@
 - The reverse flow: an owner publishes a link, anyone holding it can send the owner a secret back,
   and only the owner can open what arrives.
 - Key material: the owner needs a keypair that lets a stranger encrypt to them without the owner
-  being online at the time, which an asymmetric scheme fits, X25519 is the natural candidate paired
-  with the existing AES-256-GCM AEAD. No primitive is chosen anywhere yet; this document proposes
-  X25519 as the leading candidate and leaves the choice open for its own ADR once settled.
-- Where it lives: the request link's fragment can carry only the public key, the same way a send
-  link's fragment carries the one-time link key, because the server must never see it either. The
-  owner's private key cannot live there too, since the owner returns to the same link repeatedly to
-  decrypt submissions that arrive over time; it has to live in the owner's own browser storage, or
-  in a second, private link the owner keeps separately. Browser storage never leaves the device but
-  is lost with cleared site data or a changed browser; a second private link is portable and
-  backupable but is then a credential as sensitive as the secrets it decrypts, and leaking it
-  compromises every submission at once. Which of the two this design uses stays open.
-- Loss: whichever path is chosen, losing the private key makes every secret ever sent to that
-  request link permanently unrecoverable. The server holds only ciphertext and cannot help recover
-  it either, because it was never given a key to begin with.
-- Effect: the server still never learns the content of a submission; it stores ciphertext it
-  cannot decrypt, exactly as the send flow does. What is new is that the server now holds and hands
-  out key material, the owner's public key, to any unauthenticated requester who asks for it by id,
-  something the one-way send flow never has to do.
+  being online at the time, which an asymmetric scheme fits. Settled in
+  [0003](../adr/0003-request-link-key-material.md): a sealed box over X25519 with the existing
+  AES-256-GCM AEAD, Web Crypto only, no dependency.
+- Where the public key comes from: the request link's fragment carries it, the same way a send
+  link's fragment carries the one-time link key, because the server must never see it either.
+  Settled in 0003, with no server-side copy and no fallback.
+- Where the private key lives: also settled in 0003. It is a non-extractable key in the browser's
+  own storage, with no exportable copy and no second private link. A private link would be
+  portable and backupable, and for that reason a long lived credential travelling through history,
+  clipboards and chat logs, where one leak exposes every submission at once.
+- Loss: losing the private key makes every secret ever sent to that request link permanently
+  unrecoverable. The server holds only ciphertext and cannot help recover it either, because it
+  was never given a key to begin with. 0003 names what destroys it: cleared site data, another
+  browser or device, a private window, or a browser that drops script written storage after a
+  period without interaction.
+- Effect: the server still never learns the content of a submission, and is never handed key
+  material either; it stores ciphertext it cannot decrypt, exactly as the send flow does. What is
+  new is that a submitter has to trust the link they were given, because nothing lets them confirm
+  the public key in it belongs to the owner.
 
 ### CLI client
 
@@ -130,8 +131,10 @@
 - Is govue a deliberate successor to web-kit, or an independent library this organisation wrote
   for the same purpose. Neither repository's own docs say. Next step: ask whoever set up govue, or
   check web-kit's own history once it is reachable.
-- Request link's exact keypair primitive and where the owner's private key lives, browser storage
-  or a second private link. Proposed above, not decided. Next step: its own ADR once settled.
+- Request link's keypair primitive and where the keys live: decided in
+  [0003](../adr/0003-request-link-key-material.md). Still open there: whether a submitter can be
+  given any way to confirm the public key they were handed belongs to the owner, with the owner
+  offline. Nothing was found that does this for an anonymous submitter. Next step: none known.
 - The CLI's drift-prevention mechanism, a golden-file cross-language test suite, is proposed but
   not built. Next step: confirm the approach when `cmd/burnlink-cli` is scheduled.
 - Pickup notification's delivery guarantees: retries, timeouts and SSRF guarding for a
@@ -141,3 +144,4 @@
 
 - [0001](../adr/0001-burnlink-succeeds-old-burnlink.md)
 - [0002](../adr/0002-the-payload-format-stays-from-old-burnlink.md)
+- [0003](../adr/0003-request-link-key-material.md)
