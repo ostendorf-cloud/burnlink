@@ -1,0 +1,18 @@
+apiVersion: v2
+name: burnlink
+description: >-
+  One time secret sharing: the browser encrypts, the server hands it out exactly once.
+type: application
+# version and appVersion are stamped by release-me on every release; see release-me.yaml.
+version: 0.1.0
+appVersion: 0.1.0
+home: https://github.com/ostendorf-cloud/burnlink
+sources:
+  - https://github.com/ostendorf-cloud/burnlink
+maintainers:
+  - name: Simon Ostendorf
+    email: github@simon-ostendorf.de
+keywords:
+  - one-time-secrets
+  - vue
+  - go
