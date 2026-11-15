@@ -9,6 +9,7 @@ import {
   GovueEmptyState,
   GovueErrorState,
   GovueField,
+  GovuePage,
   GovueSkeleton,
   GovueTextarea,
 } from '@ostendorf-cloud/govue'
@@ -193,74 +194,81 @@ function onFileChange(event: Event) {
 </script>
 
 <template>
-  <GovueCard v-if="mode === 'loading'" title="Request link">
-    <GovueSkeleton :lines="3" />
-  </GovueCard>
+  <!-- GovuePage is the one main landmark, the skip link's target #main, in every mode. -->
+  <GovuePage>
+    <GovueCard v-if="mode === 'loading'" title="Request link">
+      <GovueSkeleton :lines="3" />
+    </GovueCard>
 
-  <GovueErrorState
-    v-else-if="mode === 'error'"
-    title="This request link could not be opened"
-    :message="errorMessage"
-  />
-
-  <GovueCard v-else-if="mode === 'submit'" title="Send a secret">
-    <p class="text-text-muted">
-      This secret is sealed in your browser before it ever leaves it. The server only ever sees the
-      encrypted result, and nothing here identifies you to the owner.
-    </p>
     <GovueErrorState
-      v-if="errorMessage"
-      title="Could not send this secret"
+      v-else-if="mode === 'error'"
+      title="This request link could not be opened"
       :message="errorMessage"
     />
-    <GovueField label="Secret text">
-      <GovueTextarea v-model="text" :disabled="Boolean(file)" placeholder="Type the secret here" />
-    </GovueField>
-    <GovueField label="Or attach a file instead">
-      <input type="file" @change="onFileChange" />
-    </GovueField>
-    <GovueButton variant="primary" :loading="submitting" @click="submit">Send</GovueButton>
-  </GovueCard>
 
-  <GovueCard v-else-if="mode === 'submitted'" title="Sent">
-    <p class="text-text">
-      Sealed and sent. Only the owner's own browser can open it; this page cannot show you whether
-      or when that happens.
-    </p>
-  </GovueCard>
+    <GovueCard v-else-if="mode === 'submit'" title="Send a secret">
+      <p class="text-text-muted">
+        This secret is sealed in your browser before it ever leaves it. The server only ever sees
+        the encrypted result, and nothing here identifies you to the owner.
+      </p>
+      <GovueErrorState
+        v-if="errorMessage"
+        title="Could not send this secret"
+        :message="errorMessage"
+      />
+      <GovueField label="Secret text">
+        <GovueTextarea
+          v-model="text"
+          :disabled="Boolean(file)"
+          placeholder="Type the secret here"
+        />
+      </GovueField>
+      <GovueField label="Or attach a file instead">
+        <input type="file" @change="onFileChange" />
+      </GovueField>
+      <GovueButton variant="primary" :loading="submitting" @click="submit">Send</GovueButton>
+    </GovueCard>
 
-  <GovueCard v-else title="Submissions">
-    <GovueButton variant="secondary" :loading="opening" @click="openAsOwner"
-      >Check again</GovueButton
-    >
-    <GovueErrorState
-      v-if="lossNotice"
-      title="Some submissions could not be saved"
-      :message="lossNotice"
-    />
-    <GovueErrorState
-      v-if="checkFailedNotice"
-      title="Could not check for new submissions"
-      :message="checkFailedNotice"
-    />
-    <GovueEmptyState
-      v-if="submissions.length === 0"
-      title="Nothing waiting"
-      description="Every submission that had arrived is already shown below; checking again looks for anything new."
-    />
-    <ul v-else class="flex flex-col gap-3">
-      <li
-        v-for="(submission, index) in submissions"
-        :key="index"
-        class="rounded-md border border-border p-3"
+    <GovueCard v-else-if="mode === 'submitted'" title="Sent">
+      <p class="text-text">
+        Sealed and sent. Only the owner's own browser can open it; this page cannot show you whether
+        or when that happens.
+      </p>
+    </GovueCard>
+
+    <GovueCard v-else title="Submissions">
+      <GovueButton variant="secondary" :loading="opening" @click="openAsOwner"
+        >Check again</GovueButton
       >
-        <p v-if="submission.type === 'text'" class="whitespace-pre-wrap text-text">
-          {{ submission.text }}
-        </p>
-        <p v-else class="text-text">
-          {{ submission.name }} ({{ submission.mime || 'unknown type' }})
-        </p>
-      </li>
-    </ul>
-  </GovueCard>
+      <GovueErrorState
+        v-if="lossNotice"
+        title="Some submissions could not be saved"
+        :message="lossNotice"
+      />
+      <GovueErrorState
+        v-if="checkFailedNotice"
+        title="Could not check for new submissions"
+        :message="checkFailedNotice"
+      />
+      <GovueEmptyState
+        v-if="submissions.length === 0"
+        title="Nothing waiting"
+        description="Every submission that had arrived is already shown below; checking again looks for anything new."
+      />
+      <ul v-else class="flex flex-col gap-3">
+        <li
+          v-for="(submission, index) in submissions"
+          :key="index"
+          class="rounded-md border border-border p-3"
+        >
+          <p v-if="submission.type === 'text'" class="whitespace-pre-wrap text-text">
+            {{ submission.text }}
+          </p>
+          <p v-else class="text-text">
+            {{ submission.name }} ({{ submission.mime || 'unknown type' }})
+          </p>
+        </li>
+      </ul>
+    </GovueCard>
+  </GovuePage>
 </template>

@@ -82,13 +82,21 @@ func buildHandler(logger *slog.Logger) (http.Handler, error) {
 	mux := http.NewServeMux()
 	files := http.FileServerFS(dist)
 	mux.Handle("/", files)
-	// The SPA tells /security apart from the home page by its path, so the
-	// server answers that path with index.html instead of a 404.
-	mux.HandleFunc("GET /security", func(w http.ResponseWriter, r *http.Request) {
+	// The SPA tells its pages apart by their path alone, so the server
+	// answers exactly the paths App.vue knows with index.html instead of a
+	// 404: /security and /r/<id>. Everything else, /api/ included, stays
+	// with the file server and answers 404 when no such file exists. A GET
+	// pattern also matches HEAD. {id} spans one non-empty path segment, the
+	// same shape App.vue's own /r/<id> match accepts, so /r/ and /r/a/b stay
+	// 404; the API, not this route, decides whether an id exists.
+	index := func(w http.ResponseWriter, r *http.Request) {
 		r2 := r.Clone(r.Context())
 		r2.URL.Path = "/"
+		r2.URL.RawPath = ""
 		files.ServeHTTP(w, r2)
-	})
+	}
+	mux.HandleFunc("GET /security", index)
+	mux.HandleFunc("GET /r/{id}", index)
 
 	accessLog := middleware.AccessLog{ClientIP: clientip.NewResolver(nil)}
 	security := middleware.DefaultSecurity()
