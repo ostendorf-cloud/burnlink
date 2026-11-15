@@ -30,7 +30,9 @@ The global baseline already applies here and is not repeated below.
 - `web/` is the Vue SPA, consuming govue's Vue package as a pnpm git dependency. There is still no
   router dependency: `App.vue` tells a request link's own page (`/r/<id>`, `RequestLinkView.vue`)
   apart from the home page (`CreateRequestLink.vue`) by the URL path alone, and shows
-  `SecurityView.vue` on `/security`; `cmd/burnlink` answers that one path with `index.html`.
+  `SecurityView.vue` on `/security`; `cmd/burnlink` answers exactly `/security` and `/r/<id>`
+  (one path segment) with `index.html`, every other unknown path, `/api/` included, with 404.
+  Every view renders inside `GovuePage`, the `main#main` the skip link points to.
   `SecurityView.vue` explains the encryption and marks what is not running yet, so it changes in
   the same commit as the format or the store wiring. `web/src/lib/request-link-crypto.ts` is the request
   link's own sealed-box crypto, Web Crypto only like `crypto.ts`, which it sits alongside and

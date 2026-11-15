@@ -111,6 +111,69 @@ func TestPublicHandlerSecurityPathStaysNarrow(t *testing.T) {
 	}
 }
 
+// TestPublicHandlerSPAFallback proves exactly the paths App.vue knows answer
+// with index.html, with the security headers still applied, and that every
+// other path, the API's included, keeps answering 404.
+func TestPublicHandlerSPAFallback(t *testing.T) {
+	handler, err := buildHandler(testLogger())
+	if err != nil {
+		t.Fatalf("buildHandler() error = %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		method   string
+		path     string
+		want     int
+		wantHTML bool
+	}{
+		{"request link", http.MethodGet, "/r/abc123", http.StatusOK, true},
+		{"request link with query", http.MethodGet, "/r/abc123?x=1", http.StatusOK, true},
+		{"request link head", http.MethodHead, "/r/abc123", http.StatusOK, false},
+		{"request link odd characters", http.MethodGet, "/r/a-b_c.d~e", http.StatusOK, true},
+		{"request link escaped slash", http.MethodGet, "/r/a%2Fb", http.StatusOK, true},
+		{"request link trailing slash", http.MethodGet, "/r/abc123/", http.StatusNotFound, false},
+		{"request link empty id", http.MethodGet, "/r/", http.StatusNotFound, false},
+		{"request link bare prefix", http.MethodGet, "/r", http.StatusNotFound, false},
+		{"request link nested", http.MethodGet, "/r/a/b", http.StatusNotFound, false},
+		{"request link post", http.MethodPost, "/r/abc123", http.StatusNotFound, false},
+		{"unknown path", http.MethodGet, "/no-such-page", http.StatusNotFound, false},
+		{"api unknown", http.MethodGet, "/api/v1/nothing", http.StatusNotFound, false},
+		{"api request link path", http.MethodGet, "/api/v1/request-links/abc123", http.StatusNotFound, false},
+		{"api under r", http.MethodGet, "/r/api/v1/x", http.StatusNotFound, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != tt.want {
+				t.Fatalf("%s %s status = %d, want %d", tt.method, tt.path, rec.Code, tt.want)
+			}
+			if tt.want != http.StatusOK {
+				if strings.Contains(rec.Body.String(), "<html") {
+					t.Fatalf("%s %s answered with HTML on a status %d", tt.method, tt.path, rec.Code)
+				}
+				return
+			}
+			if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/html") {
+				t.Errorf("%s %s Content-Type = %q, want text/html", tt.method, tt.path, got)
+			}
+			if rec.Header().Get("Content-Security-Policy") == "" {
+				t.Errorf("%s %s lost its Content-Security-Policy header", tt.method, tt.path)
+			}
+			if rec.Header().Get("X-Content-Type-Options") == "" {
+				t.Errorf("%s %s lost its X-Content-Type-Options header", tt.method, tt.path)
+			}
+			hasHTML := strings.Contains(rec.Body.String(), "<html")
+			if hasHTML != tt.wantHTML {
+				t.Errorf("%s %s body has html = %t, want %t", tt.method, tt.path, hasHTML, tt.wantHTML)
+			}
+		})
+	}
+}
+
 // TestAdminHandlerAnswersHealthAndReady proves the admin handler wires
 // govue's health registry onto /healthz and /readyz, both answering 200 for
 // a registry with no checks registered and not draining.

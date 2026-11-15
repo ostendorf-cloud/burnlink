@@ -46,6 +46,18 @@ describe('RequestLinkView', () => {
     setLocation('')
   })
 
+  it('renders inside the main landmark the skip link points to, while loading and on error', async () => {
+    setLocation('')
+    const { container } = render(RequestLinkView, { props: { id: 'abc' } })
+
+    // Loading: the mount check has not settled yet.
+    expect(container.querySelector('main#main')).not.toBeNull()
+
+    await waitFor(() => expect(screen.getByText(/missing its key/i)).toBeVisible())
+    expect(screen.getAllByRole('main')).toHaveLength(1)
+    expect(container.querySelector('main#main')).not.toBeNull()
+  })
+
   it('refuses a link with no fragment instead of asking the server for the key', async () => {
     setLocation('')
     render(RequestLinkView, { props: { id: 'abc' } })
