@@ -82,7 +82,9 @@
     "affinity": { "type": "object" },
     "config": {
       "type": "object",
-      "description": "No configuration surface exists yet; see values.yaml's own comment. Kept as an open object for forward compatibility rather than listing properties that do not exist yet."
+      "properties": {
+        "trustedProxyCidrs": { "type": "string" }
+      }
     },
     "existingSecret": {
       "type": "object",

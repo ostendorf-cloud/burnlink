@@ -13,7 +13,7 @@ tests:
           path: spec.replicas
           value: 1
 
-  - it: wires no environment variables, since nothing is configurable yet
+  - it: wires no environment variables when no setting is configured
     template: templates/deployment.yaml
     asserts:
       - isNull:

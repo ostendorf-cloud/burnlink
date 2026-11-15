@@ -9,7 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
+	"os"
 
+	"github.com/ostendorf-cloud/govue/clientip"
 	"github.com/ostendorf-cloud/govue/envconf"
 	"github.com/ostendorf-cloud/govue/logging"
 )
@@ -27,12 +30,23 @@ type Config struct {
 	// chart's own Ingress.
 	AdminAddr string
 	LogLevel  slog.Level
+
+	// TrustedProxies are the TCP peers whose X-Forwarded-For entry
+	// internal/webapp/requestlink's client address resolution trusts, fed
+	// into clientip.NewResolver once that handler is wired into this
+	// binary; see AGENTS.md's "Scope of this milestone". Empty means
+	// every request is attributed to its TCP peer, the secure default
+	// behind no proxy at all, but the wrong one behind the chart's own
+	// Ingress, where every submitter would otherwise collapse onto the
+	// ingress pod's own address.
+	TrustedProxies []netip.Prefix
 }
 
 // Load reads every setting through envconf, so a misconfigured deployment
 // reports every mistake on the first start instead of one per restart.
 func Load(getenv func(string) string) (Config, error) {
 	l := envconf.New(getenv)
+	resolved := resolvedGetenv(getenv)
 
 	cfg := Config{
 		Addr:      l.String("ADDR", ":8080"),
@@ -46,8 +60,24 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	cfg.LogLevel = level
 
+	trustedProxies, err := clientip.ParseCIDRs(resolved("TRUSTED_PROXY_CIDRS"))
+	if err != nil {
+		problems = append(problems, err)
+	}
+	cfg.TrustedProxies = trustedProxies
+
 	if err := errors.Join(append(problems, l.Err())...); err != nil {
 		return Config{}, fmt.Errorf("config: %w", err)
 	}
 	return cfg, nil
+}
+
+// resolvedGetenv defaults a nil lookup function to the real process
+// environment, the same default envconf.New applies, so clientip.ParseCIDRs
+// never has to special case a nil getenv.
+func resolvedGetenv(getenv func(string) string) func(string) string {
+	if getenv == nil {
+		return os.Getenv
+	}
+	return getenv
 }

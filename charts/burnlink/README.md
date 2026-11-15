@@ -20,13 +20,19 @@ helm install burnlink charts/burnlink
 | `service.adminPort` | Admin port: health, readiness, metrics | `8081` |
 | `ingress.enabled` | Expose the public port through an Ingress | `false` |
 | `httpRoute.enabled` | Expose the public port through a Gateway API HTTPRoute | `false` |
+| `config.trustedProxyCidrs` | CIDRs whose `X-Forwarded-For` entry is trusted, wired into `TRUSTED_PROXY_CIDRS` | `""` |
 
 `ingress.enabled` and `httpRoute.enabled` are mutually exclusive: enabling both fails the
 render. Neither routes to the admin port; that stays cluster-internal.
 
-`config` and `existingSecret` exist in the values shape but carry no properties yet: this
-version of burnlink has no configuration surface and no secret-shaped environment variable. Both
-arrive with the store client in a later milestone.
+Rendering with `ingress.enabled` true and `config.trustedProxyCidrs` left empty also fails the
+render: left unset behind this chart's own Ingress, the client address resolution that setting
+feeds collapses every submitter onto the ingress controller's own pod address. Set it to the
+ingress controller's pod or Service CIDR.
+
+`existingSecret` exists in the values shape but carries no properties yet: this version of
+burnlink has no secret-shaped environment variable. It arrives with the store client in a later
+milestone.
 
 ## Verification
 

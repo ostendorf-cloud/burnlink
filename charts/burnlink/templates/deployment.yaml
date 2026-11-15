@@ -20,6 +20,9 @@ spec:
   {{- if and .Values.ingress.enabled .Values.httpRoute.enabled }}
   {{ fail "ingress.enabled and httpRoute.enabled cannot both be true: pick one external route and turn the other off." }}
   {{- end }}
+  {{- if and .Values.ingress.enabled (not .Values.config.trustedProxyCidrs) }}
+  {{ fail "config.trustedProxyCidrs must be set when ingress.enabled is true: once internal/webapp/requestlink is wired into cmd/burnlink, clientip.NewResolver with no trusted prefixes attributes every request to its TCP peer, which behind this chart's own Ingress is the ingress controller's pod IP, collapsing every per-address rate limit into one shared bucket for the whole link. Set it to the ingress controller's pod or Service CIDR; see README.md." }}
+  {{- end }}
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
@@ -61,6 +64,11 @@ spec:
             - name: admin
               containerPort: {{ .Values.service.adminPort }}
               protocol: TCP
+          {{- if .Values.config.trustedProxyCidrs }}
+          env:
+            - name: TRUSTED_PROXY_CIDRS
+              value: {{ .Values.config.trustedProxyCidrs | quote }}
+          {{- end }}
           {{- if .Values.startupProbe.enabled }}
           startupProbe:
             httpGet:
