@@ -80,7 +80,15 @@ func buildHandler(logger *slog.Logger) (http.Handler, error) {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServerFS(dist))
+	files := http.FileServerFS(dist)
+	mux.Handle("/", files)
+	// The SPA tells /security apart from the home page by its path, so the
+	// server answers that path with index.html instead of a 404.
+	mux.HandleFunc("GET /security", func(w http.ResponseWriter, r *http.Request) {
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = "/"
+		files.ServeHTTP(w, r2)
+	})
 
 	accessLog := middleware.AccessLog{ClientIP: clientip.NewResolver(nil)}
 	security := middleware.DefaultSecurity()
