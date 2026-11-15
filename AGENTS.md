@@ -19,8 +19,23 @@ The global baseline already applies here and is not repeated below.
   that `web/pnpm-lock.yaml` still resolves govue's Vue package to its `/web` subdirectory. Ported
   from ostendorf.tech's own package of the same name, which this one is a close copy of: the
   check is generic to any repository consuming govue's two halves.
-- `web/` is the Vue SPA, consuming govue's Vue package as a pnpm git dependency. It renders one
-  placeholder page today: no router, no API client, nothing to route to yet.
+- `internal/store` defines `Store`, the small key/value contract (`SET NX PX`, a plain `Get`, and
+  `GETDEL`) every handler that needs persistence is written against; `internal/store/memstore` is
+  an in-process implementation for tests only, never wired into `cmd/burnlink`. See "Scope of
+  this milestone" for why the real Redis-compatible client is a separate issue.
+- `internal/webapp/requestlink` answers the request link's own endpoints: create a link, submit a
+  sealed payload to it, and open everything waiting for the owner. Written against
+  `internal/store.Store`, not against `memstore` directly, so swapping in the real client changes
+  no call site here.
+- `web/` is the Vue SPA, consuming govue's Vue package as a pnpm git dependency. There is still no
+  router dependency: `App.vue` tells a request link's own page (`/r/<id>`, `RequestLinkView.vue`)
+  apart from the home page (`CreateRequestLink.vue`) by the URL path alone, which is the only
+  second route this app has needed so far. `web/src/lib/request-link-crypto.ts` is the request
+  link's own sealed-box crypto, Web Crypto only like `crypto.ts`, which it sits alongside and
+  never changes; `request-link-keys.ts` is the thin, intentionally untested IndexedDB glue that
+  stores the owner's non-extractable private key; `request-link.ts` builds and reads the link's
+  own URL and fragment; `request-link-api.ts` calls `internal/webapp/requestlink`'s endpoints
+  through govue's own API client.
 - `charts/burnlink/` is the Helm chart. See its own `README.md` for installation and values.
 
 ## A build needs the frontend first
@@ -60,11 +75,19 @@ secret sharing itself is implemented yet. Left out, tracked as later milestones:
   a secret: `internal/config` growing to load and validate the store's address and credentials,
   the Redis-compatible client speaking `SET NX PX` and `GETDEL`, the payload format, and the
   three endpoints a link needs.
-- A request-link feature: the reverse direction, where an owner sends a link and the other person
-  sends a secret back, encrypted against the owner's own public key.
 - A CLI client: sending a secret from a terminal with the same crypto the page uses.
 - A pickup notification: a sender optionally leaves a webhook or a mail address and learns when
   their link was redeemed, with the server learning nothing about the secret's content either way.
+
+The request-link feature, the reverse direction where an owner publishes a link and a stranger
+seals a secret back to it, is implemented: the crypto, `internal/webapp/requestlink`'s three
+endpoints, and the two views above. It is not yet reachable from the running binary:
+`cmd/burnlink`'s handler registers no routes under `internal/webapp/requestlink` because doing so
+needs a `store.Store` backed by something that survives a restart and is shared across replicas,
+which is the bullet above, not yet built. `internal/store/memstore` exists only so this feature's
+own handler tests do not have to wait for that; wiring it into `cmd/burnlink` instead would quietly
+break the Helm chart's multi-replica assumption, since two pods would then each hold submissions
+the other cannot see.
 
 ## Deviations
 
@@ -81,9 +104,11 @@ secret sharing itself is implemented yet. Left out, tracked as later milestones:
 - The Helm chart ships no single-replica guard and no `strategy.type: Recreate`: this scaffold
   keeps no server-side session state, so more than one replica, or two pods briefly coexisting
   during a rollout, is harmless.
-- `values.schema.json` does not require `existingSecret` or list properties under it or under
-  `config`: no secret-shaped environment variable and no configuration surface exist yet. Both
-  objects stay in the values shape, empty, for forward compatibility; a required secret arrives
-  with the store client in a later milestone.
+- `values.schema.json` does not require `existingSecret` or list properties under it: no
+  secret-shaped environment variable exists yet. It stays in the values shape, empty, for
+  forward compatibility; a required secret arrives with the store client in a later milestone.
+  `config` now lists `trustedProxyCidrs`, the one setting `internal/config` loads from the
+  environment today; a further setting joins both schemas together as the store client and
+  crypto work lands.
 - `web/src/theme/burnlink.css` is a placeholder neutral palette generated from a plain grey
   neutral and a muted taupe seed, not a chosen brand: this project has no visual identity yet.

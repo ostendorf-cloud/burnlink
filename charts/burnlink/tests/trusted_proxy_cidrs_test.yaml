@@ -1,0 +1,37 @@
+suite: config.trustedProxyCidrs required behind ingress
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: fails the render when ingress is enabled and trustedProxyCidrs is left empty
+    set:
+      ingress:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            config.trustedProxyCidrs must be set when ingress.enabled is true: once
+            internal/webapp/requestlink is wired into cmd/burnlink, clientip.NewResolver
+            with no trusted prefixes attributes every request to its TCP peer, which
+            behind this chart's own Ingress is the ingress controller's pod IP,
+            collapsing every per-address rate limit into one shared bucket for the whole
+            link. Set it to the ingress controller's pod or Service CIDR; see README.md.
+
+  - it: renders fine and wires TRUSTED_PROXY_CIDRS when ingress is enabled and it is set
+    set:
+      ingress:
+        enabled: true
+      config:
+        trustedProxyCidrs: "10.0.0.0/8"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TRUSTED_PROXY_CIDRS
+            value: "10.0.0.0/8"
+
+  - it: omits TRUSTED_PROXY_CIDRS when not configured
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].env

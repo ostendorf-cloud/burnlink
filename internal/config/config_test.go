@@ -5,6 +5,7 @@ package config
 
 import (
 	"log/slog"
+	"net/netip"
 	"strings"
 	"testing"
 )
@@ -34,6 +35,9 @@ func TestLoadAppliesDefaultsWhenEverythingIsUnset(t *testing.T) {
 	}
 	if cfg.LogLevel != slog.LevelInfo {
 		t.Errorf("LogLevel = %v, want %v", cfg.LogLevel, slog.LevelInfo)
+	}
+	if cfg.TrustedProxies != nil {
+		t.Errorf("TrustedProxies = %v, want nil", cfg.TrustedProxies)
 	}
 }
 
@@ -72,6 +76,24 @@ func TestLoadOverridesEachVariable(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "TRUSTED_PROXY_CIDRS",
+			env:  map[string]string{"TRUSTED_PROXY_CIDRS": "10.0.0.0/8, 192.168.1.1"},
+			check: func(t *testing.T, cfg Config) {
+				want := []netip.Prefix{
+					netip.MustParsePrefix("10.0.0.0/8"),
+					netip.PrefixFrom(netip.MustParseAddr("192.168.1.1"), 32),
+				}
+				if len(cfg.TrustedProxies) != len(want) {
+					t.Fatalf("TrustedProxies = %v, want %v", cfg.TrustedProxies, want)
+				}
+				for i := range want {
+					if cfg.TrustedProxies[i] != want[i] {
+						t.Errorf("TrustedProxies[%d] = %v, want %v", i, cfg.TrustedProxies[i], want[i])
+					}
+				}
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -98,6 +120,21 @@ func TestLoadRejectsAnInvalidLogLevel(t *testing.T) {
 		t.Errorf("Load() error = %q, want it wrapped with \"config:\"", err.Error())
 	}
 	if !strings.Contains(err.Error(), "verbose") {
+		t.Errorf("Load() error = %q, want it to name the invalid value", err.Error())
+	}
+}
+
+func TestLoadRejectsAnInvalidTrustedProxyCIDR(t *testing.T) {
+	t.Parallel()
+
+	_, err := Load(env(map[string]string{"TRUSTED_PROXY_CIDRS": "not-a-cidr"}))
+	if err == nil {
+		t.Fatal("Load() error = nil, want an error for an invalid TRUSTED_PROXY_CIDRS entry")
+	}
+	if !strings.Contains(err.Error(), "config:") {
+		t.Errorf("Load() error = %q, want it wrapped with \"config:\"", err.Error())
+	}
+	if !strings.Contains(err.Error(), "not-a-cidr") {
 		t.Errorf("Load() error = %q, want it to name the invalid value", err.Error())
 	}
 }
