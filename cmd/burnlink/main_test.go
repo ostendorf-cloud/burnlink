@@ -58,6 +58,59 @@ func TestPublicHandlerServesIndexHTML(t *testing.T) {
 	}
 }
 
+// TestPublicHandlerServesIndexHTMLOnSecurityPath proves the security page's
+// path answers with the SPA instead of a 404.
+func TestPublicHandlerServesIndexHTMLOnSecurityPath(t *testing.T) {
+	handler, err := buildHandler(testLogger())
+	if err != nil {
+		t.Fatalf("buildHandler() error = %v", err)
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/security", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /security status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if !strings.Contains(rec.Body.String(), "<html") {
+		t.Fatalf("GET /security body does not look like index.html: %q", rec.Body.String())
+	}
+}
+
+// TestPublicHandlerSecurityPathStaysNarrow proves the /security route does
+// not widen what the server answers: a trailing slash, an unknown path and
+// a non-GET method keep their previous status.
+func TestPublicHandlerSecurityPathStaysNarrow(t *testing.T) {
+	handler, err := buildHandler(testLogger())
+	if err != nil {
+		t.Fatalf("buildHandler() error = %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		want   int
+	}{
+		{"trailing slash", http.MethodGet, "/security/", http.StatusNotFound},
+		{"unknown path", http.MethodGet, "/no-such-page", http.StatusNotFound},
+		// The catch-all file server owns every method but GET on this path,
+		// exactly as before /security had a route of its own.
+		{"post", http.MethodPost, "/security", http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("%s %s status = %d, want %d", tt.method, tt.path, rec.Code, tt.want)
+			}
+		})
+	}
+}
+
 // TestAdminHandlerAnswersHealthAndReady proves the admin handler wires
 // govue's health registry onto /healthz and /readyz, both answering 200 for
 // a registry with no checks registered and not draining.
