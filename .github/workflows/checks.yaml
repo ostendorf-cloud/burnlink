@@ -190,7 +190,7 @@ jobs:
   # keeps the same invocation for local development, and AGENTS.md records
   # that the two are kept in step by hand.
   license:
-    uses: ostendorf-cloud/workflows/.github/workflows/reusable-license.yaml@91979cf4cff86d00ebee28dfaf6e3b452aaeb1a9  # v0.2.2
+    uses: ostendorf-cloud/workflows/.github/workflows/reusable-license.yaml@a798b963d20b239bec48c101af965e08fac36146  # v0.3.0
     with:
       copyright-holder: Simon Ostendorf
       year: "2026"
@@ -199,4 +199,4 @@ jobs:
         find web/src -type f \( -name "*.ts" -o -name "*.vue" \) -not -path "*/node_modules/*" -not -path "*/dist/*"
 
   renovate-config:
-    uses: ostendorf-cloud/workflows/.github/workflows/reusable-renovate-config.yaml@91979cf4cff86d00ebee28dfaf6e3b452aaeb1a9  # v0.2.2
+    uses: ostendorf-cloud/workflows/.github/workflows/reusable-renovate-config.yaml@a798b963d20b239bec48c101af965e08fac36146  # v0.3.0
