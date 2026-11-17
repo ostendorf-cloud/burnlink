@@ -97,10 +97,6 @@ the other cannot see.
 
 - Apache-2.0, not the predecessor repository's MIT. Deliberate: this is a new organisation
   repository, and the baseline's default license applies.
-- `.github/workflows/dco.yaml`, `codeql.yaml` and the `license`/`renovate-config` jobs in
-  `checks.yaml` pin `ostendorf-cloud/workflows`'s reusable workflows at the exact tag `v0.2.2`,
-  the newest tag at the time this repository was scaffolded, not a floating `v0` major tag:
-  `ostendorf-cloud/workflows` had not cut one yet. Repoint at `v0` once it exists.
 - Every CI job runs on `ubuntu-latest`, with a `codeql.yaml` workflow and a `license` job, instead
   of a self-hosted Blacksmith runner: this repository is public, so its minutes are not billed,
   and it needs GitHub Advanced Security for code scanning rather than lacking it.
