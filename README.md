@@ -49,7 +49,7 @@ public one.
 | `STORE_ADDR` | Address of the Redis-compatible store, `host:port` | none | yes |
 | `TRUSTED_PROXY_CIDRS` | CIDRs, comma separated, whose `X-Forwarded-For` is trusted | empty, trust none | no |
 | `SECRET_MAX_BYTES` | Largest ciphertext accepted, decoded, in bytes (1 to 67108864) | `1048576` | no |
-| `SECRET_LIFETIME_MIN` | Shortest lifetime a sender may ask for, for example `30s` or `7d` | `1m` | no |
+| `SECRET_LIFETIME_MIN` | Shortest lifetime a sender may ask for, in whole seconds, for example `30s` or `7d` | `1m` | no |
 | `SECRET_LIFETIME_MAX` | Longest lifetime a sender may ask for (up to `30d`) | `7d` | no |
 | `SECRET_LIFETIME_DEFAULT` | Lifetime used when none is asked for, between min and max | `24h` | no |
 | `RATE_LIMIT_BURST` | Requests per client address at once | `10` | no |

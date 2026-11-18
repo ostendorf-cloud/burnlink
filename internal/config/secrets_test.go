@@ -69,6 +69,9 @@ func TestLoadSecretRejections(t *testing.T) {
 		{"default below min", map[string]string{"SECRET_LIFETIME_MIN": "48h", "SECRET_LIFETIME_MAX": "72h"}, "SECRET_LIFETIME_DEFAULT"},
 		{"lifetime not a duration", map[string]string{"SECRET_LIFETIME_DEFAULT": "soon"}, "SECRET_LIFETIME_DEFAULT"},
 		{"lifetime above the hard cap", map[string]string{"SECRET_LIFETIME_MAX": "90d"}, "SECRET_LIFETIME_MAX"},
+		{"min with a fraction of a second", map[string]string{"SECRET_LIFETIME_MIN": "1500ms"}, "whole number of seconds"},
+		{"max with a fraction of a second", map[string]string{"SECRET_LIFETIME_MAX": "90m500ms"}, "whole number of seconds"},
+		{"default with a fraction of a second", map[string]string{"SECRET_LIFETIME_DEFAULT": "1.5h1ms"}, "whole number of seconds"},
 		{"burst zero", map[string]string{"RATE_LIMIT_BURST": "0"}, "RATE_LIMIT_BURST"},
 		{"per zero", map[string]string{"RATE_LIMIT_PER": "0s"}, "RATE_LIMIT_PER"},
 	}

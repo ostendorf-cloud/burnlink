@@ -23,8 +23,9 @@ The global baseline already applies here and is not repeated below.
 - `internal/store` defines `Store`, the small key/value contract (`SET NX PX`, a plain `Get`, and
   `GETDEL`) every handler that needs persistence is written against; `internal/store/memstore` is
   an in-process implementation for tests only, never wired into `cmd/burnlink`.
-  `store.Secrets` (`Put`, `Take`, `Ping`) is the one time secret API over a `store.Backend`, with
-  two sentinels: `ErrExists`, and `ErrNotFound` for expired, taken and never existed alike.
+  `store.Secrets` (`Put`, `Take`, `Exists`, `Ping`) is the one time secret API over a
+  `store.Backend`. `Exists` is a plain `GET`, which leaves the TTL alone. It has two sentinels:
+  `ErrExists`, and `ErrNotFound` for expired, taken and never existed alike.
   `internal/store/redisstore` is the production client (go-redis), wired into `cmd/burnlink`
   through readiness. Size limit, id validation and lifetime choice belong to the API layer.
   Its tests against a real server need `BURNLINK_TEST_REDIS_ADDR=host:port`, set from a service

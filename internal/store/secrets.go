@@ -38,9 +38,12 @@ type Backend interface {
 
 // Secrets stores a ciphertext once and hands it out exactly once.
 //
-// It only speaks the two primitives the concept names: SET NX PX through
-// Store.SetNX, and GETDEL through Store.GetDel. A secret expires through
-// the store's own lifetime on the key; this service runs no sweeper.
+// It speaks the two primitives the concept names: SET NX PX through
+// Store.SetNX, and GETDEL through Store.GetDel. Exists adds a third, a plain
+// GET through Store.Get, for the non destructive check. GET neither deletes
+// nor touches the key's TTL in Valkey, so asking never extends a lifetime.
+// A secret expires through the store's own lifetime on the key; this
+// service runs no sweeper.
 //
 // Secrets never looks inside a value and never limits its size. Rejecting an
 // oversized ciphertext, validating an id and choosing the lifetime are the

@@ -69,6 +69,20 @@ func loadSecrets(l *envconf.Loader, problems []error) (Secrets, RateLimit, []err
 	// The cross field rules only make sense when every single value parsed;
 	// otherwise a typo would also report a misleading ordering problem.
 	if l.Err() == nil {
+		// The API compares and reports lifetimes in whole seconds, so a
+		// fraction would let a lifetime through that is below the minimum.
+		for _, d := range []struct {
+			name  string
+			value time.Duration
+		}{
+			{"SECRET_LIFETIME_MIN", s.LifetimeMin},
+			{"SECRET_LIFETIME_MAX", s.LifetimeMax},
+			{"SECRET_LIFETIME_DEFAULT", s.LifetimeDefault},
+		} {
+			if d.value%time.Second != 0 {
+				problems = append(problems, fmt.Errorf("%s (%s) must be a whole number of seconds", d.name, d.value))
+			}
+		}
 		switch {
 		case s.LifetimeMin > s.LifetimeMax:
 			problems = append(problems, fmt.Errorf(

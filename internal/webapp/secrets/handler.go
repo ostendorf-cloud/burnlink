@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/ostendorf-cloud/govue/api"
@@ -39,8 +41,24 @@ const (
 )
 
 // jsonOverhead is the room the JSON envelope around the base64 ciphertext
-// needs on top of the base64 text itself.
+// needs on top of the base64 text itself. It is sized for compact JSON as
+// JSON.stringify writes it. A client that escapes every "/" as "\/", which
+// is PHP's default, adds a byte per slash and can see a ciphertext close to
+// the size limit refused with 413. The page is not affected.
 const jsonOverhead = 1024
+
+// NoStoreOnAPI sets Cache-Control: no-store on every request whose cleaned
+// path is under /api/, before the mux runs. The mux answers a path it has to
+// clean (a double slash, a dot segment) with a redirect of its own, which no
+// route wrapper ever sees. It belongs directly around the mux.
+func NoStoreOnAPI(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if p := path.Clean("/" + r.URL.Path); p == "/api" || strings.HasPrefix(p, "/api/") {
+			w.Header().Set("Cache-Control", "no-store")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 // Vault is what the handlers need from the secret store. *store.Secrets is
 // the production implementation.

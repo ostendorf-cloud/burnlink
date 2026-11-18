@@ -155,6 +155,7 @@ func buildHandler(logger *slog.Logger, cfg config.Config, vault secrets.Vault) (
 		middleware.RequestID(logger),
 		security.Middleware,
 		accessLog.Middleware,
+		secrets.NoStoreOnAPI,
 	), nil
 }
 

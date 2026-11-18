@@ -13,9 +13,11 @@
 //   - GETDEL key
 //   - PING
 //   - a plain GET for store.Store's non consuming Get, which the request
-//     link needs.
+//     link and the one time secret's check (Secrets.Exists) need. GET does
+//     not touch the key's TTL.
 //
-// The one time secret path (store.Secrets) uses SET NX PX and GETDEL only.
+// The one time secret path (store.Secrets) writes with SET NX PX, hands out
+// with GETDEL, and checks with the plain GET.
 // A wrong password makes the server answer WRONGPASS, an error that does not
 // contain the credential. Expiry is the server's own: this package starts no
 // goroutine and runs no sweeper.

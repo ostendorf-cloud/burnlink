@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -40,13 +41,24 @@ const (
 	b64     = "c2VjcmV0" // "secret"
 )
 
-// backend is the in process store plus a count of the writes it received.
+// backend is the in process store plus a count of the writes and the plain
+// reads it received. Its Get yields before it answers, so a Take built from
+// a Get followed by a delete would leave a window for a second reader.
 type backend struct {
 	*memstore.Store
 	puts *atomic.Int32
+	gets *atomic.Int32
 }
 
 func (backend) Ping(context.Context) error { return nil }
+
+func (b backend) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	b.gets.Add(1)
+	value, ok, err := b.Store.Get(ctx, key)
+	runtime.Gosched()
+	time.Sleep(time.Millisecond)
+	return value, ok, err
+}
 
 func (b backend) SetNX(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	b.puts.Add(1)
@@ -54,12 +66,15 @@ func (b backend) SetNX(ctx context.Context, key string, value []byte, ttl time.D
 }
 
 type harness struct {
-	t     *testing.T
-	h     *Handler
-	mux   *http.ServeMux
-	puts  *atomic.Int32
-	vault *store.Secrets
-	now   *time.Time
+	t   *testing.T
+	h   *Handler
+	mux *http.ServeMux
+	// handler is the mux behind the outer middleware main.go puts around it.
+	handler http.Handler
+	gets    *atomic.Int32
+	puts    *atomic.Int32
+	vault   *store.Secrets
+	now     *time.Time
 }
 
 func newHarness(t *testing.T, mutate ...func(*Config)) *harness {
@@ -67,8 +82,8 @@ func newHarness(t *testing.T, mutate ...func(*Config)) *harness {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	mem := memstore.New()
 	mem.Now = func() time.Time { return now }
-	puts := new(atomic.Int32)
-	vault := store.NewSecrets(backend{mem, puts})
+	puts, gets := new(atomic.Int32), new(atomic.Int32)
+	vault := store.NewSecrets(backend{mem, puts, gets})
 	cfg := Config{
 		Vault:           vault,
 		MaxBytes:        testMax,
@@ -90,7 +105,7 @@ func newHarness(t *testing.T, mutate ...func(*Config)) *harness {
 	}
 	mux := http.NewServeMux()
 	h.Register(mux)
-	return &harness{t: t, h: h, mux: mux, puts: puts, vault: vault, now: &now}
+	return &harness{t: t, h: h, mux: mux, handler: NoStoreOnAPI(mux), puts: puts, gets: gets, vault: vault, now: &now}
 }
 
 type reqOpt func(*http.Request)
@@ -102,7 +117,7 @@ func remote(addr string) reqOpt { return func(r *http.Request) { r.RemoteAddr = 
 // replaces it.
 func (hn *harness) do(method, path, body string, opts ...reqOpt) *httptest.ResponseRecorder {
 	hn.t.Helper()
-	return serve(hn.t, hn.mux, method, path, body, opts...)
+	return serve(hn.t, hn.handler, method, path, body, opts...)
 }
 
 func serve(t *testing.T, h http.Handler, method, path, body string, opts ...reqOpt) *httptest.ResponseRecorder {
@@ -302,7 +317,7 @@ func TestStoreStopsReadingAnOversizedBody(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/secrets", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	hn.mux.ServeHTTP(rec, req)
+	hn.handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want 413", rec.Code)
@@ -386,11 +401,17 @@ func TestCheckDoesNotConsume(t *testing.T) {
 	}
 }
 
+// TestConcurrentOpensServeExactlyOne checks what the handler layer owns: one
+// open is one atomic GETDEL and nothing else. The atomicity itself is the
+// store's property, proven against a real server in internal/store/redisstore.
+// The fake's plain Get yields, so a read then delete built from Get would
+// both open a window for a second reader and show up in the Get count.
 func TestConcurrentOpensServeExactlyOne(t *testing.T) {
 	t.Parallel()
 
 	hn := newHarness(t)
 	id := hn.put(`{"ciphertext":"` + b64 + `"}`)
+	getsBefore := hn.gets.Load()
 
 	const readers = 64
 	var served, refused atomic.Int32
@@ -412,6 +433,9 @@ func TestConcurrentOpensServeExactlyOne(t *testing.T) {
 
 	if served.Load() != 1 || refused.Load() != readers-1 {
 		t.Errorf("served %d, refused %d, want 1 and %d", served.Load(), refused.Load(), readers-1)
+	}
+	if got := hn.gets.Load() - getsBefore; got != 0 {
+		t.Errorf("opening made %d plain reads, want 0: a reveal must be one GETDEL", got)
 	}
 }
 
@@ -558,7 +582,7 @@ func TestRefusalsAreIndistinguishableOnTheWire(t *testing.T) {
 
 	hn := newHarness(t)
 	ids := refusalIDs(t, hn)
-	chain := middleware.Chain(hn.mux, middleware.RequestID(testLogger()))
+	chain := middleware.Chain(hn.handler, middleware.RequestID(testLogger()))
 	srv := httptest.NewServer(chain)
 	t.Cleanup(srv.Close)
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -618,7 +642,7 @@ func TestRefusalBodyHasNoRequestID(t *testing.T) {
 	t.Parallel()
 
 	hn := newHarness(t)
-	chain := middleware.Chain(hn.mux, middleware.RequestID(testLogger()))
+	chain := middleware.Chain(hn.handler, middleware.RequestID(testLogger()))
 	a := serve(t, chain, http.MethodPost, "/api/v1/secrets/AAAAAAAAAAAAAAAAAAAAAA/open", "{}")
 	b := serve(t, chain, http.MethodPost, "/api/v1/secrets/AAAAAAAAAAAAAAAAAAAAAQ/open", "{}")
 	if a.Header().Get(middleware.RequestIDHeader) == b.Header().Get(middleware.RequestIDHeader) {
@@ -730,6 +754,67 @@ func TestStoreOutageIsAnErrorNotARefusal(t *testing.T) {
 			t.Errorf("%s: Cache-Control = %q", tc.path, rec.Header().Get("Cache-Control"))
 		}
 	}
+}
+
+// collidingVault answers every write with ErrExists and counts the attempts.
+type collidingVault struct {
+	recordingVault
+	puts atomic.Int32
+}
+
+func (v *collidingVault) Put(context.Context, string, []byte, time.Duration) error {
+	v.puts.Add(1)
+	return store.ErrExists
+}
+
+// TestStoreDoesNotRetryAnIDCollision: a collision of 128 random bits is a
+// bug to surface as a 500, not a condition to retry around.
+func TestStoreDoesNotRetryAnIDCollision(t *testing.T) {
+	t.Parallel()
+
+	v := &collidingVault{}
+	hn := newHarness(t, func(c *Config) { c.Vault = v })
+	rec := hn.do(http.MethodPost, "/api/v1/secrets", `{"ciphertext":"`+b64+`"}`)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", rec.Code)
+	}
+	if got := v.puts.Load(); got != 1 {
+		t.Errorf("Put was called %d times, want exactly 1", got)
+	}
+	if strings.Contains(rec.Body.String(), "exists") {
+		t.Errorf("the cause reached the client: %s", rec.Body)
+	}
+}
+
+// TestMuxRedirectsAreNoStore: the mux answers a path it has to clean with a
+// redirect before any route runs. It still carries no-store, and what it says
+// does not depend on the secret behind the path.
+func TestMuxRedirectsAreNoStore(t *testing.T) {
+	t.Parallel()
+
+	hn := newHarness(t)
+	live := hn.put(`{"ciphertext":"` + b64 + `"}`)
+	for _, path := range []string{
+		"/api/v1/secrets//open",
+		"/api//v1/config",
+		"/api/./v1/config",
+		"/api/v1/../v1/config",
+		"//api/v1/config",
+		"/api/v1/secrets/" + live + "/../" + live,
+	} {
+		rec := hn.do(http.MethodGet, path, "")
+		if rec.Code < 300 || rec.Code > 399 {
+			t.Errorf("GET %s = %d, want a redirect", path, rec.Code)
+		}
+		if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+			t.Errorf("GET %s (%d): Cache-Control = %q, want no-store", path, rec.Code, got)
+		}
+	}
+
+	// The same cleaned path redirects to the same place whatever it hides.
+	a := snap(hn.do(http.MethodPost, "/api/v1/secrets//open", "{}"))
+	b := snap(hn.do(http.MethodPost, "/api/v1/secrets//open", "{}", header("X-Whatever", "1")))
+	assertSame(t, "redirect", a, b)
 }
 
 func TestRateLimit(t *testing.T) {
@@ -854,6 +939,8 @@ func TestCrossSiteRequestsAreRefused(t *testing.T) {
 		{"fetch metadata same-origin", []reqOpt{header("Sec-Fetch-Site", "same-origin")}, 201},
 		{"fetch metadata none", []reqOpt{header("Sec-Fetch-Site", "none")}, 201},
 		{"foreign Origin without fetch metadata", []reqOpt{header("Origin", "https://evil.example")}, 403},
+		{"Origin null without fetch metadata", []reqOpt{header("Origin", "null")}, 403},
+		{"Origin null with same-origin fetch metadata", []reqOpt{header("Origin", "null"), header("Sec-Fetch-Site", "same-origin")}, 201},
 		{"own Origin without fetch metadata", []reqOpt{header("Origin", "http://example.com")}, 201},
 		{"no browser signal at all", nil, 201},
 	}
@@ -1019,7 +1106,7 @@ func TestNeitherIDNorSecretReachesTheLog(t *testing.T) {
 	logger := newTestLogger(&buf)
 	hn := newHarness(t)
 	accessLog := middleware.AccessLog{ClientIP: clientip.NewResolver(nil)}
-	chain := middleware.Chain(hn.mux, middleware.RequestID(logger), accessLog.Middleware)
+	chain := middleware.Chain(hn.handler, middleware.RequestID(logger), accessLog.Middleware)
 
 	create := serve(t, chain, http.MethodPost, "/api/v1/secrets", `{"ciphertext":"`+b64+`"}`)
 	var out storeResponse
