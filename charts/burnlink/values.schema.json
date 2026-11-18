@@ -84,6 +84,26 @@
       "type": "object",
       "properties": {
         "trustedProxyCidrs": { "type": "string" },
+        "secrets": {
+          "type": "object",
+          "description": "Limits of a stored secret. An empty value leaves the application default in place.",
+          "properties": {
+            "maxBytes": { "type": ["integer", "string"], "minimum": 1, "pattern": "^[0-9]*$" },
+            "lifetimeMin": { "type": "string" },
+            "lifetimeMax": { "type": "string" },
+            "lifetimeDefault": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "rateLimit": {
+          "type": "object",
+          "description": "Per client address budget of the secret endpoints. An empty value leaves the application default in place.",
+          "properties": {
+            "burst": { "type": ["integer", "string"], "minimum": 1, "pattern": "^[0-9]*$" },
+            "per": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
         "store": {
           "type": "object",
           "properties": {

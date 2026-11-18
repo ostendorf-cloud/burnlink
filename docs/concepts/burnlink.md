@@ -50,11 +50,34 @@
   [0002](../adr/0002-the-payload-format-stays-from-old-burnlink.md) for the full layout.
 - Three endpoints carry a secret's lifecycle: store it, ask whether it is still there without
   taking it, open and delete it in one step. Config and version endpoints sit alongside them.
+  See "API surface" below.
 - The store contract is two primitives: `SET NX PX` so a write never overwrites an existing
   secret, `GETDEL` so a reveal and a delete happen atomically and two readers cannot both win.
-- Everything above runs today only as a scaffold: the wiring, the crypto and the store client
-  exist, and readiness reports the store; the three endpoints are the next milestone, not yet
-  built.
+- The wiring, the store client and the five endpoints exist, and readiness reports the store.
+  The page that calls them is the next milestone.
+
+### API surface
+
+| Method and path | Request | Answers |
+| --- | --- | --- |
+| `POST /api/v1/secrets` | JSON `{"ciphertext": <standard base64>, "lifetimeSeconds": <optional>}` | `201` with `{"id", "expiresAt"}`, `400`, `413`, `415`, `429` |
+| `HEAD /api/v1/secrets/{id}` | none | `200` with no body, or the one refusal |
+| `POST /api/v1/secrets/{id}/open` | JSON content type, body ignored | `200` with `{"ciphertext"}` and the secret is gone, or the one refusal |
+| `GET /api/v1/config` | none | `200` with `{"maxCiphertextBytes", "lifetime": {"minSeconds", "maxSeconds", "defaultSeconds"}}` |
+| `GET /api/v1/version` | none | `200` with `{"version", "commit", "goVersion"}` |
+
+- The id is 16 bytes from `crypto/rand`, 128 bits, as 22 characters of unpadded base64url. Only
+  the canonical encoding is valid.
+- The one refusal is `404` with a fixed body in govue's error shape and no request id, for an
+  unknown, expired, already opened or malformed id alike, and for every other method or path under
+  `/api/v1/secrets/`. A malformed id is looked up under a fixed dummy id, so the store round trip
+  happens either way. Timing beyond that is not equalised.
+- `POST` requires the `application/json` content type, and a request the browser reports as
+  cross site is refused with `403`. Every answer carries `Cache-Control: no-store`.
+- The size limit applies to the decoded ciphertext and is enforced while the body is read. A
+  lifetime outside the configured bounds is refused with `400`, never clamped.
+- The rate limit is one budget per resolved client address across the three secret endpoints.
+  The address comes from `X-Forwarded-For` only through the configured trusted proxy ranges.
 
 ### Request link
 

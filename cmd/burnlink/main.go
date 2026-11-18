@@ -1,11 +1,10 @@
 // Copyright 2026 Simon Ostendorf
 // SPDX-License-Identifier: Apache-2.0
 
-// Command burnlink serves the embedded Vue build and answers
-// health/readiness/metrics on govue's admin listener. Readiness includes
-// the Redis-compatible store, configured through internal/config. The API
-// routes that make this a one time secret sharing service arrive in a later
-// milestone. See AGENTS.md's "Scope of this milestone".
+// Command burnlink serves the embedded Vue build and the one time secret
+// API (internal/webapp/secrets), and answers health/readiness/metrics on
+// govue's admin listener. Readiness includes the Redis-compatible store,
+// configured through internal/config.
 package main
 
 import (
@@ -24,11 +23,16 @@ import (
 	"github.com/ostendorf-cloud/govue/logging"
 	"github.com/ostendorf-cloud/govue/metrics"
 	"github.com/ostendorf-cloud/govue/middleware"
+	"github.com/ostendorf-cloud/govue/ratelimit"
 
 	"github.com/ostendorf-cloud/burnlink/internal/config"
 	"github.com/ostendorf-cloud/burnlink/internal/store"
 	"github.com/ostendorf-cloud/burnlink/internal/store/redisstore"
+	"github.com/ostendorf-cloud/burnlink/internal/webapp/secrets"
 )
+
+// rateLimitKeys bounds how many client addresses the limiter tracks at once.
+const rateLimitKeys = 100_000
 
 func main() {
 	if err := run(); err != nil {
@@ -45,11 +49,6 @@ func run() error {
 
 	logger := logging.New(os.Stdout, cfg.LogLevel)
 
-	publicHandler, err := buildHandler(logger)
-	if err != nil {
-		return err
-	}
-
 	client, err := redisstore.New(redisstore.Options{
 		Addr:     cfg.Store.Addr,
 		Username: cfg.Store.Username,
@@ -60,10 +59,14 @@ func run() error {
 		return err
 	}
 	defer func() { _ = client.Close() }()
-	// The secrets are not routed yet: the API endpoints build on this in a
-	// later milestone. The store is already part of readiness, so a pod that
-	// cannot reach it never receives traffic.
+	// The store is part of readiness, so a pod that cannot reach it never
+	// receives traffic, and it backs the secret endpoints.
 	secrets := store.NewSecrets(client)
+
+	publicHandler, err := buildHandler(logger, cfg, secrets)
+	if err != nil {
+		return err
+	}
 
 	healthRegistry := health.New()
 	addStoreCheck(healthRegistry, secrets)
@@ -99,17 +102,32 @@ func addStoreCheck(registry *health.Registry, p pinger) {
 	registry.Add("store", 0, p.Ping)
 }
 
-// buildHandler serves the embedded SPA bundle behind govue's default
-// security headers and access log. A real application adds its own API
-// routes here, through its own handler-building package, once there is
-// something to route to; see AGENTS.md.
-func buildHandler(logger *slog.Logger) (http.Handler, error) {
+// buildHandler serves the embedded SPA bundle and the secret API behind
+// govue's default security headers and access log. The client address, for
+// the rate limit and the access log alike, is resolved from the trusted
+// proxy ranges in cfg.
+func buildHandler(logger *slog.Logger, cfg config.Config, vault secrets.Vault) (http.Handler, error) {
 	dist, err := fs.Sub(distFS, "dist")
 	if err != nil {
 		return nil, fmt.Errorf("burnlink: %w", err)
 	}
 
+	clientIPs := clientip.NewResolver(cfg.TrustedProxies)
+	api, err := secrets.New(secrets.Config{
+		Vault:           vault,
+		MaxBytes:        cfg.Secrets.MaxBytes,
+		LifetimeMin:     cfg.Secrets.LifetimeMin,
+		LifetimeMax:     cfg.Secrets.LifetimeMax,
+		LifetimeDefault: cfg.Secrets.LifetimeDefault,
+		Limiter:         ratelimit.New(cfg.RateLimit.Burst, cfg.RateLimit.Per, rateLimitKeys),
+		ClientIP:        clientIPs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("burnlink: %w", err)
+	}
+
 	mux := http.NewServeMux()
+	api.Register(mux)
 	files := http.FileServerFS(dist)
 	mux.Handle("/", files)
 	// The SPA tells its pages apart by their path alone, so the server
@@ -118,7 +136,8 @@ func buildHandler(logger *slog.Logger) (http.Handler, error) {
 	// with the file server and answers 404 when no such file exists. A GET
 	// pattern also matches HEAD. {id} spans one non-empty path segment, the
 	// same shape App.vue's own /r/<id> match accepts, so /r/ and /r/a/b stay
-	// 404; the API, not this route, decides whether an id exists.
+	// 404. Everything under /api/ is answered by api.Register above, JSON
+	// 404 included, so the file server never sees an API path.
 	index := func(w http.ResponseWriter, r *http.Request) {
 		r2 := r.Clone(r.Context())
 		r2.URL.Path = "/"
@@ -128,7 +147,7 @@ func buildHandler(logger *slog.Logger) (http.Handler, error) {
 	mux.HandleFunc("GET /security", index)
 	mux.HandleFunc("GET /r/{id}", index)
 
-	accessLog := middleware.AccessLog{ClientIP: clientip.NewResolver(nil)}
+	accessLog := middleware.AccessLog{ClientIP: clientIPs}
 	security := middleware.DefaultSecurity()
 
 	return middleware.Chain(mux,

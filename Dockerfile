@@ -41,7 +41,13 @@ COPY cmd/ cmd/
 COPY internal/ internal/
 COPY --from=frontend /src/cmd/burnlink/dist cmd/burnlink/dist
 
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/burnlink ./cmd/burnlink
+# VERSION and COMMIT feed the build endpoint. Without them it reports "unknown",
+# because the build context has no .git directory for the toolchain to read.
+ARG VERSION=""
+ARG COMMIT=""
+RUN CGO_ENABLED=0 go build -trimpath \
+    -ldflags="-s -w -X github.com/ostendorf-cloud/burnlink/internal/buildinfo.Version=${VERSION} -X github.com/ostendorf-cloud/burnlink/internal/buildinfo.Commit=${COMMIT}" \
+    -o /out/burnlink ./cmd/burnlink
 
 # distroless/static-debian12 carries only a minimal root filesystem,
 # ca-certificates and tzdata, no shell, no package manager. The ":nonroot" tag

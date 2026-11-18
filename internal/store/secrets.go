@@ -103,6 +103,19 @@ func (s *Secrets) Take(ctx context.Context, id string) ([]byte, error) {
 	return value, nil
 }
 
+// Exists reports whether a secret is stored under id, without taking it. It
+// reads through Store.Get, the only non destructive read the contract has,
+// so it transfers the value from the store and drops it; the check is cheap
+// for a secret of the configured size limit and never consumes anything.
+// Like Take, it cannot tell expired, taken and unknown apart.
+func (s *Secrets) Exists(ctx context.Context, id string) (bool, error) {
+	_, ok, err := s.backend.Get(ctx, SecretKeyPrefix+id)
+	if err != nil {
+		return false, fmt.Errorf("store: exists: %w", err)
+	}
+	return ok, nil
+}
+
 // Ping reports whether the store is reachable, for the readiness probe. Its
 // error text can reach a log, so a Backend must keep credentials out of it.
 func (s *Secrets) Ping(ctx context.Context) error {

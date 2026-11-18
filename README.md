@@ -15,10 +15,9 @@ Redis-compatible, read with `GETDEL` so a reveal and a delete happen in one step
 `SET NX PX` so a second write can never overwrite an existing one; the deployment runs Valkey
 behind it.
 
-None of the above is implemented yet. This repository is currently a scaffold: it wires the Go
-service to the embedded Vue build and to health, readiness and metrics, with no crypto, no store
-client and no API routes. See `AGENTS.md`'s "Scope of this milestone" for what is built and what
-is still ahead.
+The server side is implemented: the store client and the five API endpoints in
+`docs/concepts/burnlink.md`. The page that encrypts, and the CLI and the notification, are still
+ahead. See `AGENTS.md`'s "Scope of this milestone" for what is built and what is not.
 
 ## Install
 
@@ -36,8 +35,9 @@ task build
 ```
 
 The server reads its configuration from the environment; see the Configuration table below.
-There is no secret-shaped variable yet. `/healthz`, `/readyz` and `/metrics` answer on a
-second, administrative listener (`ADMIN_ADDR`), never on the public one.
+The store credentials are the only secret-shaped variables and have `_FILE` twins. `/healthz`,
+`/readyz` and `/metrics` answer on a second, administrative listener (`ADMIN_ADDR`), never on the
+public one.
 
 ## Configuration
 
@@ -46,6 +46,14 @@ second, administrative listener (`ADMIN_ADDR`), never on the public one.
 | `ADDR` | Address the public HTTP server listens on | `:8080` | no |
 | `ADMIN_ADDR` | Address govue's admin listener listens on: `/healthz`, `/readyz` and `/metrics` | `:8081` | no |
 | `LOG_LEVEL` | `debug`, `info`, `warn` or `error` | `info` | no |
+| `STORE_ADDR` | Address of the Redis-compatible store, `host:port` | none | yes |
+| `TRUSTED_PROXY_CIDRS` | CIDRs, comma separated, whose `X-Forwarded-For` is trusted | empty, trust none | no |
+| `SECRET_MAX_BYTES` | Largest ciphertext accepted, decoded, in bytes (1 to 67108864) | `1048576` | no |
+| `SECRET_LIFETIME_MIN` | Shortest lifetime a sender may ask for, for example `30s` or `7d` | `1m` | no |
+| `SECRET_LIFETIME_MAX` | Longest lifetime a sender may ask for (up to `30d`) | `7d` | no |
+| `SECRET_LIFETIME_DEFAULT` | Lifetime used when none is asked for, between min and max | `24h` | no |
+| `RATE_LIMIT_BURST` | Requests per client address at once | `10` | no |
+| `RATE_LIMIT_PER` | Period over which the burst refills completely | `1m` | no |
 
 ## Container
 
