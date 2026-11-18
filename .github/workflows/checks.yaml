@@ -118,6 +118,19 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # The store tests run against a real Redis-compatible server, the same
+    # kind the deployment runs. They skip without BURNLINK_TEST_REDIS_ADDR, so
+    # this job is where they actually execute. The tag floats on purpose: no
+    # digest could be resolved when this was written. Pin it by multi-platform
+    # manifest list digest, which Renovate is expected to propose.
+    services:
+      dragonfly:
+        image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+        ports:
+          - 6379:6379
+        options: --ulimit memlock=-1
+    env:
+      BURNLINK_TEST_REDIS_ADDR: 127.0.0.1:6379
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d  # v5.2.9

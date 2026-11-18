@@ -83,12 +83,27 @@
     "config": {
       "type": "object",
       "properties": {
-        "trustedProxyCidrs": { "type": "string" }
+        "trustedProxyCidrs": { "type": "string" },
+        "store": {
+          "type": "object",
+          "properties": {
+            "addr": {
+              "type": "string",
+              "description": "host:port of the Redis-compatible store. Required; enforced by a template fail guard, not minLength, matching this chart's pattern for a value with no usable default."
+            },
+            "tls": { "type": "boolean" }
+          }
+        }
       }
     },
     "existingSecret": {
       "type": "object",
-      "description": "No secret-shaped environment variable exists yet; see values.yaml's own comment. Kept as an open object, with no required key, for forward compatibility: a required store credential arrives with the store client in a later milestone."
+      "description": "An existing Secret holding the store's credentials, mounted as files. Both keys are optional.",
+      "properties": {
+        "name": { "type": "string" },
+        "usernameKey": { "type": "string" },
+        "passwordKey": { "type": "string" }
+      }
     }
   }
 }

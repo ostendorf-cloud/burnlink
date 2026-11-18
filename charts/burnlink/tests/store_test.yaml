@@ -1,0 +1,124 @@
+suite: store configuration
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: fails the render when the store address is missing
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            config.store.addr must be set to the Redis-compatible store's host:port, for
+            example dragonfly:6379; the service refuses to start without it.
+
+  - it: wires the address and nothing about credentials by default
+    set:
+      config:
+        store:
+          addr: dragonfly:6379
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: STORE_ADDR
+            value: dragonfly:6379
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: STORE_TLS
+            value: "true"
+
+  - it: wires STORE_TLS when tls is on
+    set:
+      config:
+        store:
+          addr: dragonfly:6379
+          tls: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: STORE_TLS
+            value: "true"
+
+  - it: mounts the existing Secret as files and wires both _FILE variables
+    set:
+      config:
+        store:
+          addr: dragonfly:6379
+      existingSecret:
+        name: burnlink-store
+        usernameKey: user
+        passwordKey: pass
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: STORE_USERNAME_FILE
+            value: /var/run/secrets/burnlink-store/username
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: STORE_PASSWORD_FILE
+            value: /var/run/secrets/burnlink-store/password
+      - equal:
+          path: spec.template.spec.volumes[0].secret.secretName
+          value: burnlink-store
+      - equal:
+          path: spec.template.spec.volumes[0].secret.items
+          value:
+            - key: user
+              path: username
+            - key: pass
+              path: password
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].readOnly
+          value: true
+
+  - it: never puts a credential into the environment, only a file path
+    set:
+      config:
+        store:
+          addr: dragonfly:6379
+      existingSecret:
+        name: burnlink-store
+        passwordKey: pass
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: STORE_PASSWORD
+      - lengthEqual:
+          path: spec.template.spec.containers[0].env
+          count: 2
+
+  - it: wires only the password when no username key is set
+    set:
+      config:
+        store:
+          addr: dragonfly:6379
+      existingSecret:
+        name: burnlink-store
+        passwordKey: pass
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: STORE_USERNAME_FILE
+            value: /var/run/secrets/burnlink-store/username
+      - equal:
+          path: spec.template.spec.volumes[0].secret.items
+          value:
+            - key: pass
+              path: password
+
+  - it: fails the render when a Secret is named without any key
+    set:
+      config:
+        store:
+          addr: dragonfly:6379
+      existingSecret:
+        name: burnlink-store
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            existingSecret.name is set but neither existingSecret.usernameKey nor
+            existingSecret.passwordKey names a key in it.

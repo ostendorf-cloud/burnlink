@@ -20,6 +20,12 @@ spec:
   {{- if and .Values.ingress.enabled .Values.httpRoute.enabled }}
   {{ fail "ingress.enabled and httpRoute.enabled cannot both be true: pick one external route and turn the other off." }}
   {{- end }}
+  {{- if not .Values.config.store.addr }}
+  {{ fail "config.store.addr must be set to the Redis-compatible store's host:port, for example dragonfly:6379; the service refuses to start without it." }}
+  {{- end }}
+  {{- if and .Values.existingSecret.name (not .Values.existingSecret.usernameKey) (not .Values.existingSecret.passwordKey) }}
+  {{ fail "existingSecret.name is set but neither existingSecret.usernameKey nor existingSecret.passwordKey names a key in it." }}
+  {{- end }}
   {{- if and .Values.ingress.enabled (not .Values.config.trustedProxyCidrs) }}
   {{ fail "config.trustedProxyCidrs must be set when ingress.enabled is true: once internal/webapp/requestlink is wired into cmd/burnlink, clientip.NewResolver with no trusted prefixes attributes every request to its TCP peer, which behind this chart's own Ingress is the ingress controller's pod IP, collapsing every per-address rate limit into one shared bucket for the whole link. Set it to the ingress controller's pod or Service CIDR; see README.md." }}
   {{- end }}
@@ -64,10 +70,32 @@ spec:
             - name: admin
               containerPort: {{ .Values.service.adminPort }}
               protocol: TCP
-          {{- if .Values.config.trustedProxyCidrs }}
           env:
+            - name: STORE_ADDR
+              value: {{ .Values.config.store.addr | quote }}
+            {{- if .Values.config.store.tls }}
+            - name: STORE_TLS
+              value: "true"
+            {{- end }}
+            {{- if .Values.existingSecret.name }}
+            {{- if .Values.existingSecret.usernameKey }}
+            - name: STORE_USERNAME_FILE
+              value: /var/run/secrets/burnlink-store/username
+            {{- end }}
+            {{- if .Values.existingSecret.passwordKey }}
+            - name: STORE_PASSWORD_FILE
+              value: /var/run/secrets/burnlink-store/password
+            {{- end }}
+            {{- end }}
+            {{- if .Values.config.trustedProxyCidrs }}
             - name: TRUSTED_PROXY_CIDRS
               value: {{ .Values.config.trustedProxyCidrs | quote }}
+            {{- end }}
+          {{- if .Values.existingSecret.name }}
+          volumeMounts:
+            - name: store-credentials
+              mountPath: /var/run/secrets/burnlink-store
+              readOnly: true
           {{- end }}
           {{- if .Values.startupProbe.enabled }}
           startupProbe:
@@ -94,6 +122,22 @@ spec:
             failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.existingSecret.name }}
+      volumes:
+        - name: store-credentials
+          secret:
+            secretName: {{ .Values.existingSecret.name | quote }}
+            defaultMode: 0440
+            items:
+              {{- if .Values.existingSecret.usernameKey }}
+              - key: {{ .Values.existingSecret.usernameKey | quote }}
+                path: username
+              {{- end }}
+              {{- if .Values.existingSecret.passwordKey }}
+              - key: {{ .Values.existingSecret.passwordKey | quote }}
+                path: password
+              {{- end }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

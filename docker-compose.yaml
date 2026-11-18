@@ -8,6 +8,23 @@ services:
       ADDR: ":8080"
       ADMIN_ADDR: ":8081"
       LOG_LEVEL: "debug"
+      # Dragonfly below, reached by its service name. STORE_USERNAME and
+      # STORE_PASSWORD, or their _FILE twins, are set the same way once the
+      # store requires authentication; see .env.example.
+      STORE_ADDR: "dragonfly:6379"
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:8081:8081"
+    depends_on:
+      - dragonfly
+
+  # The deployment's store. Local development only: no authentication, no
+  # published port, and no volume, so a restart drops every secret, which is
+  # what a one time secret store should do anyway.
+  # The floating tag is deliberate until a digest is pinned: this repository
+  # pins images by digest, and Renovate is expected to add it.
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    restart: unless-stopped
+    ulimits:
+      memlock: -1

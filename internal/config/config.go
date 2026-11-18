@@ -17,11 +17,9 @@ import (
 	"github.com/ostendorf-cloud/govue/logging"
 )
 
-// Config is every setting this binary reads from the environment. There is
-// no secret-shaped field yet: the crypto, the store client and the API
-// routes that make burnlink actually store and hand out a secret all arrive
-// in a later milestone, at which point this struct grows the store's
-// address and credentials.
+// Config is every setting this binary reads from the environment. The
+// store's credentials are its only secret-shaped fields, and each has a
+// _FILE twin; see Store.
 type Config struct {
 	// Addr is the public HTTP listener's address.
 	Addr string
@@ -40,6 +38,9 @@ type Config struct {
 	// Ingress, where every submitter would otherwise collapse onto the
 	// ingress pod's own address.
 	TrustedProxies []netip.Prefix
+
+	// Store is the Redis-compatible store's address and credentials.
+	Store Store
 }
 
 // Load reads every setting through envconf, so a misconfigured deployment
@@ -54,6 +55,7 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	var problems []error
+	cfg.Store, problems = loadStore(l, problems)
 	level, err := logging.Level(l.String("LOG_LEVEL", "info"))
 	if err != nil {
 		problems = append(problems, err)

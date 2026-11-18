@@ -5,6 +5,10 @@ templates:
   - templates/serviceaccount.yaml
   - templates/ingress.yaml
   - templates/httproute.yaml
+set:
+  config:
+    store:
+      addr: dragonfly:6379
 tests:
   - it: renders one replica by default
     template: templates/deployment.yaml
@@ -13,11 +17,18 @@ tests:
           path: spec.replicas
           value: 1
 
-  - it: wires no environment variables when no setting is configured
+  - it: wires only the required store address when nothing else is configured
     template: templates/deployment.yaml
     asserts:
-      - isNull:
+      - equal:
           path: spec.template.spec.containers[0].env
+          value:
+            - name: STORE_ADDR
+              value: dragonfly:6379
+      - isNull:
+          path: spec.template.spec.volumes
+      - isNull:
+          path: spec.template.spec.containers[0].volumeMounts
 
   - it: never creates a Secret from plaintext values
     template: templates/deployment.yaml

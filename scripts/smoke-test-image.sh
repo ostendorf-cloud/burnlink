@@ -7,8 +7,10 @@
 # .github/workflows/checks.yaml right after it builds and loads the image,
 # so this never needs a registry.
 #
-# No environment variable is passed to the container: this scaffold has no
-# configuration surface yet, see cmd/burnlink/main.go.
+# The only environment variable passed is STORE_ADDR, which is required. It
+# points at the container's own loopback, where nothing listens, so the
+# store is unreachable on purpose: the smoke test then asserts readiness
+# reports unready while liveness stays up.
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
@@ -40,6 +42,7 @@ docker run \
   --name "$container" \
   --publish "127.0.0.1:8080:8080" \
   --publish "127.0.0.1:8081:8081" \
+  --env STORE_ADDR="127.0.0.1:6379" \
   "$image" >/dev/null
 
 # wait_for_health polls /healthz on the admin listener for up to
@@ -92,7 +95,8 @@ assert_contains() {
 }
 
 assert_status "/healthz" "200" "$admin_url"
-assert_status "/readyz" "200" "$admin_url"
+# Nothing listens on the store address, so readiness must say so.
+assert_status "/readyz" "503" "$admin_url"
 assert_status "/metrics" "200" "$admin_url"
 
 # The public listener must never answer /metrics: that stays on the admin

@@ -13,16 +13,22 @@ The global baseline already applies here and is not repeated below.
   `embed.go` embeds `dist/` (the built SPA, written by `task web:build`) next to the Go source
   file, which is why it sits under `cmd/` rather than `internal/`.
 - `internal/config` loads and validates this service's own environment once, aggregated into
-  one error. There is no secret-shaped variable yet: the crypto, the store client and the API
-  routes that would need one arrive in a later milestone.
+  one error. The store's address (`STORE_ADDR`, required), `STORE_TLS` and its two credentials,
+  `STORE_USERNAME` and `STORE_PASSWORD`, each with a `_FILE` twin, are in `config.Store`, which
+  never prints a credential.
 - `internal/depsync` checks that `go.mod` and `web/package.json` pin the same govue version, and
   that `web/pnpm-lock.yaml` still resolves govue's Vue package to its `/web` subdirectory. Ported
   from ostendorf.tech's own package of the same name, which this one is a close copy of: the
   check is generic to any repository consuming govue's two halves.
 - `internal/store` defines `Store`, the small key/value contract (`SET NX PX`, a plain `Get`, and
   `GETDEL`) every handler that needs persistence is written against; `internal/store/memstore` is
-  an in-process implementation for tests only, never wired into `cmd/burnlink`. See "Scope of
-  this milestone" for why the real Redis-compatible client is a separate issue.
+  an in-process implementation for tests only, never wired into `cmd/burnlink`.
+  `store.Secrets` (`Put`, `Take`, `Ping`) is the one time secret API over a `store.Backend`, with
+  two sentinels: `ErrExists`, and `ErrNotFound` for expired, taken and never existed alike.
+  `internal/store/redisstore` is the production client (go-redis), wired into `cmd/burnlink`
+  through readiness. Size limit, id validation and lifetime choice belong to the API layer.
+  Its tests against a real server need `BURNLINK_TEST_REDIS_ADDR=host:port`, set from a service
+  container in CI, and skip loudly without it.
 - `internal/webapp/requestlink` answers the request link's own endpoints: create a link, submit a
   sealed payload to it, and open everything waiting for the owner. Written against
   `internal/store.Store`, not against `memstore` directly, so swapping in the real client changes
@@ -75,10 +81,8 @@ This repository is a scaffold: the Go entry point, the embedded Vue build, healt
 metrics on govue's admin listener, the Helm chart and the container build. Nothing about one time
 secret sharing itself is implemented yet. Left out, tracked as later milestones:
 
-- The crypto, the store client and the API routes that make burnlink actually store and hand out
-  a secret: `internal/config` growing to load and validate the store's address and credentials,
-  the Redis-compatible client speaking `SET NX PX` and `GETDEL`, the payload format, and the
-  three endpoints a link needs.
+- The API routes that make burnlink actually store and hand out a secret: the three endpoints a
+  link needs, built on `store.Secrets`. The store client and its configuration exist.
 - A CLI client: sending a secret from a terminal with the same crypto the page uses.
 - A pickup notification: a sender optionally leaves a webhook or a mail address and learns when
   their link was redeemed, with the server learning nothing about the secret's content either way.
@@ -87,11 +91,11 @@ The request-link feature, the reverse direction where an owner publishes a link 
 seals a secret back to it, is implemented: the crypto, `internal/webapp/requestlink`'s three
 endpoints, and the two views above. It is not yet reachable from the running binary:
 `cmd/burnlink`'s handler registers no routes under `internal/webapp/requestlink` because doing so
-needs a `store.Store` backed by something that survives a restart and is shared across replicas,
-which is the bullet above, not yet built. `internal/store/memstore` exists only so this feature's
-own handler tests do not have to wait for that; wiring it into `cmd/burnlink` instead would quietly
-break the Helm chart's multi-replica assumption, since two pods would then each hold submissions
-the other cannot see.
+needs a `store.Store` backed by something that survives a restart and is shared across replicas.
+`redisstore.Client` is that store; only the wiring is missing. `internal/store/memstore` exists
+only so this feature's own handler tests do not have to wait for that; wiring it into
+`cmd/burnlink` instead would quietly break the Helm chart's multi-replica assumption, since two
+pods would then each hold submissions the other cannot see.
 
 ## Deviations
 
@@ -104,11 +108,9 @@ the other cannot see.
 - The Helm chart ships no single-replica guard and no `strategy.type: Recreate`: this scaffold
   keeps no server-side session state, so more than one replica, or two pods briefly coexisting
   during a rollout, is harmless.
-- `values.schema.json` does not require `existingSecret` or list properties under it: no
-  secret-shaped environment variable exists yet. It stays in the values shape, empty, for
-  forward compatibility; a required secret arrives with the store client in a later milestone.
-  `config` now lists `trustedProxyCidrs`, the one setting `internal/config` loads from the
-  environment today; a further setting joins both schemas together as the store client and
-  crypto work lands.
+- `values.schema.json` does not mark `config.store.addr` or the `existingSecret` keys required:
+  the template's fail guards enforce them, like the other values with no usable default. The
+  store credentials are optional, a store without authentication being valid, and reach the pod
+  as mounted files through the `_FILE` variables, never as environment values.
 - `web/src/theme/burnlink.css` is a placeholder neutral palette generated from a plain grey
   neutral and a muted taupe seed, not a chosen brand: this project has no visual identity yet.
