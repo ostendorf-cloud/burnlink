@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Command burnlink serves the embedded Vue build and answers
-// health/readiness/metrics on govue's admin listener. It carries no
-// secret-shaped configuration yet: the crypto, the store client and the
-// API routes that make this a one time secret sharing service all arrive
-// in a later milestone, at which point internal/config grows the store's
-// address and credentials. See AGENTS.md's "Scope of this milestone".
+// health/readiness/metrics on govue's admin listener. Readiness includes
+// the Redis-compatible store, configured through internal/config. The API
+// routes that make this a one time secret sharing service arrive in a later
+// milestone. See AGENTS.md's "Scope of this milestone".
 package main
 
 import (
@@ -27,6 +26,8 @@ import (
 	"github.com/ostendorf-cloud/govue/middleware"
 
 	"github.com/ostendorf-cloud/burnlink/internal/config"
+	"github.com/ostendorf-cloud/burnlink/internal/store"
+	"github.com/ostendorf-cloud/burnlink/internal/store/redisstore"
 )
 
 func main() {
@@ -49,7 +50,23 @@ func run() error {
 		return err
 	}
 
+	client, err := redisstore.New(redisstore.Options{
+		Addr:     cfg.Store.Addr,
+		Username: cfg.Store.Username,
+		Password: cfg.Store.Password,
+		TLS:      cfg.Store.TLS,
+	})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+	// The secrets are not routed yet: the API endpoints build on this in a
+	// later milestone. The store is already part of readiness, so a pod that
+	// cannot reach it never receives traffic.
+	secrets := store.NewSecrets(client)
+
 	healthRegistry := health.New()
+	addStoreCheck(healthRegistry, secrets)
 	adminHandler := buildAdminHandler(logger, healthRegistry)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -67,6 +84,19 @@ func run() error {
 		Addr:    cfg.AdminAddr,
 		Handler: adminHandler,
 	})
+}
+
+// pinger is what readiness needs from the store.
+type pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// addStoreCheck makes readiness unready while the store does not answer.
+// Liveness stays untouched: restarting this process would not bring the
+// store back. govue's registry reports the failed check by name only and
+// logs the cause.
+func addStoreCheck(registry *health.Registry, p pinger) {
+	registry.Add("store", 0, p.Ping)
 }
 
 // buildHandler serves the embedded SPA bundle behind govue's default

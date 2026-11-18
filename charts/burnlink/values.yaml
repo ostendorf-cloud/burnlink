@@ -140,11 +140,18 @@ tolerations: []
 affinity: {}
 
 # cmd/burnlink/main.go hardcodes its listen addresses; config below carries
-# the one setting internal/config does load from the environment today.
-# Everything else this object will eventually need stays out, for forward
-# compatibility with the store client and crypto work a later milestone
-# adds; see the root AGENTS.md.
+# the settings internal/config loads from the environment, and nothing else.
 config:
+  # The Redis-compatible store the service keeps secrets in; the deployment
+  # runs Valkey. The chart deploys no store itself.
+  store:
+    # host:port, fed into STORE_ADDR. Required: templates/deployment.yaml
+    # rejects a render that leaves it empty, because the service refuses to
+    # start without it.
+    addr: ""
+    # Connect over TLS, fed into STORE_TLS.
+    tls: false
+
   # Fed into TRUSTED_PROXY_CIDRS, which internal/config parses into
   # internal/webapp/requestlink's client address resolution once that
   # handler is wired into this binary; see the root AGENTS.md. Left empty,
@@ -156,9 +163,16 @@ config:
   # render that leaves this empty while ingress.enabled is true.
   trustedProxyCidrs: ""
 
-# This chart never creates a Secret from plaintext values. No secret-shaped
-# environment variable exists yet either (no crypto, no store client), so
-# nothing here is required: a required store credential arrives with the
-# store client in a later milestone, the same way existingSecret.name
-# became required in other charts once they had a secret to wire.
-existingSecret: {}
+# The store's credentials. This chart never creates a Secret from plaintext
+# values: name an existing Secret that holds them. The Secret is mounted as
+# files and reaches the service through STORE_USERNAME_FILE and
+# STORE_PASSWORD_FILE, so no credential appears in the pod's environment.
+# Both keys are optional, for a store with no authentication or no ACL user;
+# leave name empty to mount nothing.
+existingSecret:
+  # Name of the Secret, in the release's namespace.
+  name: ""
+  # Key in that Secret holding the ACL username. Empty means unused.
+  usernameKey: ""
+  # Key in that Secret holding the password. Empty means unused.
+  passwordKey: ""

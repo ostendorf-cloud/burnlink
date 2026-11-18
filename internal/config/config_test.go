@@ -5,6 +5,7 @@ package config
 
 import (
 	"log/slog"
+	"maps"
 	"net/netip"
 	"strings"
 	"testing"
@@ -19,10 +20,18 @@ func env(values map[string]string) func(string) string {
 	}
 }
 
+// withStore returns a copy of values that carries the one required store
+// variable, so a test about another setting does not have to repeat it.
+func withStore(values map[string]string) map[string]string {
+	out := map[string]string{"STORE_ADDR": "store.invalid:6379"}
+	maps.Copy(out, values)
+	return out
+}
+
 func TestLoadAppliesDefaultsWhenEverythingIsUnset(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := Load(env(nil))
+	cfg, err := Load(env(withStore(nil)))
 	if err != nil {
 		t.Fatalf("Load() error = %v, want nil", err)
 	}
@@ -100,7 +109,7 @@ func TestLoadOverridesEachVariable(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg, err := Load(env(tc.env))
+			cfg, err := Load(env(withStore(tc.env)))
 			if err != nil {
 				t.Fatalf("Load() error = %v, want nil", err)
 			}
@@ -112,7 +121,7 @@ func TestLoadOverridesEachVariable(t *testing.T) {
 func TestLoadRejectsAnInvalidLogLevel(t *testing.T) {
 	t.Parallel()
 
-	_, err := Load(env(map[string]string{"LOG_LEVEL": "verbose"}))
+	_, err := Load(env(withStore(map[string]string{"LOG_LEVEL": "verbose"})))
 	if err == nil {
 		t.Fatal("Load() error = nil, want an error for an invalid LOG_LEVEL")
 	}
@@ -127,7 +136,7 @@ func TestLoadRejectsAnInvalidLogLevel(t *testing.T) {
 func TestLoadRejectsAnInvalidTrustedProxyCIDR(t *testing.T) {
 	t.Parallel()
 
-	_, err := Load(env(map[string]string{"TRUSTED_PROXY_CIDRS": "not-a-cidr"}))
+	_, err := Load(env(withStore(map[string]string{"TRUSTED_PROXY_CIDRS": "not-a-cidr"})))
 	if err == nil {
 		t.Fatal("Load() error = nil, want an error for an invalid TRUSTED_PROXY_CIDRS entry")
 	}

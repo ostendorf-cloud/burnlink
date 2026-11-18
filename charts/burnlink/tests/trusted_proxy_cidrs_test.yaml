@@ -1,6 +1,10 @@
 suite: config.trustedProxyCidrs required behind ingress
 templates:
   - templates/deployment.yaml
+set:
+  config:
+    store:
+      addr: valkey:6379
 tests:
   - it: fails the render when ingress is enabled and trustedProxyCidrs is left empty
     set:
@@ -33,5 +37,6 @@ tests:
 
   - it: omits TRUSTED_PROXY_CIDRS when not configured
     asserts:
-      - isNull:
+      - lengthEqual:
           path: spec.template.spec.containers[0].env
+          count: 1

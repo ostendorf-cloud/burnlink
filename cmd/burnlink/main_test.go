@@ -4,14 +4,21 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ostendorf-cloud/govue/health"
+
+	"github.com/ostendorf-cloud/burnlink/internal/store"
+	"github.com/ostendorf-cloud/burnlink/internal/store/redisstore"
 )
 
 func testLogger() *slog.Logger {
@@ -189,6 +196,82 @@ func TestAdminHandlerAnswersHealthAndReady(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Errorf("GET %s status = %d, want %d", path, rec.Code, http.StatusOK)
 		}
+	}
+}
+
+// switchPinger is a store whose reachability a test flips.
+type switchPinger struct{ down atomic.Bool }
+
+func (p *switchPinger) Ping(context.Context) error {
+	if p.down.Load() {
+		return errors.New("store unreachable")
+	}
+	return nil
+}
+
+// TestReadinessFollowsTheStore proves readiness reports unready while the
+// store is unreachable, ready again when it returns, and that liveness never
+// depends on it.
+func TestReadinessFollowsTheStore(t *testing.T) {
+	registry := health.New()
+	p := &switchPinger{}
+	addStoreCheck(registry, p)
+	handler := buildAdminHandler(testLogger(), registry)
+
+	status := func(path string) int {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	cases := []struct {
+		name      string
+		down      bool
+		wantReady int
+	}{
+		{"store up", false, http.StatusOK},
+		{"store down", true, http.StatusServiceUnavailable},
+		{"store back", false, http.StatusOK},
+	}
+	for _, tc := range cases {
+		p.down.Store(tc.down)
+		if got := status("/readyz"); got != tc.wantReady {
+			t.Errorf("%s: GET /readyz status = %d, want %d", tc.name, got, tc.wantReady)
+		}
+		if got := status("/healthz"); got != http.StatusOK {
+			t.Errorf("%s: GET /healthz status = %d, want %d", tc.name, got, http.StatusOK)
+		}
+	}
+}
+
+// TestReadinessWithTheRealClientAgainstAClosedPort wires the production
+// client, not a fake, to an address nothing listens on. It needs no server.
+func TestReadinessWithTheRealClientAgainstAClosedPort(t *testing.T) {
+	l, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen() error = %v", err)
+	}
+	addr := l.Addr().String()
+	if err := l.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	client, err := redisstore.New(redisstore.Options{Addr: addr})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+
+	registry := health.New()
+	addStoreCheck(registry, store.NewSecrets(client))
+	handler := buildAdminHandler(testLogger(), registry)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("GET /readyz status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
 	}
 }
 

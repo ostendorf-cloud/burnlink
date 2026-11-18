@@ -12,7 +12,7 @@ same answer, so the response itself cannot be used to tell those cases apart. A 
 protect a secret in addition to the link key. The payload format is a contract with the page, not
 an implementation detail: changing it means a new version, not a silent edit. The store is
 Redis-compatible, read with `GETDEL` so a reveal and a delete happen in one step, and written with
-`SET NX PX` so a second write can never overwrite an existing one; the deployment runs Dragonfly
+`SET NX PX` so a second write can never overwrite an existing one; the deployment runs Valkey
 behind it.
 
 None of the above is implemented yet. This repository is currently a scaffold: it wires the Go

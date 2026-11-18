@@ -180,6 +180,26 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # The store tests run against a real Valkey server, the deployment's
+    # store. They skip without BURNLINK_TEST_REDIS_ADDR, so this job is where
+    # they actually execute. The variable says REDIS because the protocol is
+    # Redis compatible. The image tag is a major tag on purpose: Renovate pins
+    # the digest (pinDigests in the shared preset), and the first pin is the
+    # manifest list digest. The tag was not checked against the registry
+    # offline. The health check keeps the steps from starting before the
+    # server answers.
+    services:
+      valkey:
+        image: docker.io/valkey/valkey:8
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      BURNLINK_TEST_REDIS_ADDR: 127.0.0.1:6379
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d  # v5.2.9

@@ -8,6 +8,22 @@ services:
       ADDR: ":8080"
       ADMIN_ADDR: ":8081"
       LOG_LEVEL: "debug"
+      # Valkey below, reached by its service name. STORE_USERNAME and
+      # STORE_PASSWORD, or their _FILE twins, are set the same way once the
+      # store requires authentication; see .env.example.
+      STORE_ADDR: "valkey:6379"
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:8081:8081"
+    depends_on:
+      - valkey
+
+  # The deployment's store. Local development only: no authentication, no
+  # published port, and no volume, so a restart drops every secret, which is
+  # what a one time secret store should do anyway.
+  # The tag is a major tag on purpose. Renovate pins the digest (pinDigests in
+  # the shared preset), and the first pin is the manifest list digest. The tag
+  # was not checked against the registry offline.
+  valkey:
+    image: docker.io/valkey/valkey:8
+    restart: unless-stopped

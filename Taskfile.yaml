@@ -74,12 +74,18 @@ tasks:
   lint:helm:
     desc: Helm chart lint
     cmds:
-      - helm lint charts/burnlink
+      # config.store.addr has no usable default, so a render needs one.
+      - helm lint charts/burnlink --set config.store.addr=valkey:6379
 
   validate:kubeconform:
     desc: Schema validation of the rendered Helm chart
     cmds:
-      - helm template charts/burnlink | kubeconform -strict -summary
+      - |
+        helm template charts/burnlink \
+          --set config.store.addr=valkey:6379 \
+          --set existingSecret.name=burnlink-store \
+          --set existingSecret.passwordKey=password \
+          | kubeconform -strict -summary
 
   # helm-unittest is a Helm plugin, and helm only finds a plugin inside HELM_PLUGINS.
   # The mise entry's postinstall copies it into helm's own plugin directory, but that
@@ -109,8 +115,11 @@ tasks:
     cmds:
       - go build -o bin/burnlink ./cmd/burnlink
 
+  # The store tests in internal/store/redisstore need a real Redis-compatible
+  # server and skip, loudly, without BURNLINK_TEST_REDIS_ADDR. CI sets it from
+  # a service container; locally, start a server and export host:port.
   test:go:
-    desc: Go test
+    desc: Go test, including the store tests when BURNLINK_TEST_REDIS_ADDR is set
     deps: [web:build]
     cmds:
       - go test -race -count=1 ./...
