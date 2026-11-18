@@ -24,7 +24,9 @@ import (
 )
 
 // testAddrEnv names the environment variable that holds the host:port of a
-// real Redis-compatible server (Dragonfly, Redis or Valkey). Tests marked
+// real Redis-compatible server (Valkey, the deployment's store, or Redis).
+// The name says REDIS because the protocol and the client are Redis
+// compatible, not because the deployment runs Redis. Tests marked
 // "real server" need it. CI starts a service container and sets it; a
 // developer runs a server and exports it, for example:
 //
@@ -225,7 +227,7 @@ func TestRealServerSecretExpiresOnItsOwn(t *testing.T) {
 
 	raw := redis.NewClient(&redis.Options{Addr: addr})
 	t.Cleanup(func() { _ = raw.Close() })
-	ttl, err := raw.PTTL(ctx, id).Result()
+	ttl, err := raw.PTTL(ctx, store.SecretKeyPrefix+id).Result()
 	if err != nil {
 		t.Fatalf("PTTL error = %v", err)
 	}
@@ -250,14 +252,15 @@ func TestRealServerGetDoesNotConsume(t *testing.T) {
 	ctx := t.Context()
 	id := uniqueID(t)
 
-	if _, ok, err := c.Get(ctx, id); ok || err != nil {
+	key := store.SecretKeyPrefix + id
+	if _, ok, err := c.Get(ctx, key); ok || err != nil {
 		t.Fatalf("Get() of a missing key = %v, %v, want false, nil", ok, err)
 	}
 	if err := s.Put(ctx, id, []byte("v"), time.Minute); err != nil {
 		t.Fatalf("Put() error = %v", err)
 	}
 	for range 2 {
-		if got, ok, err := c.Get(ctx, id); !ok || err != nil || string(got) != "v" {
+		if got, ok, err := c.Get(ctx, key); !ok || err != nil || string(got) != "v" {
 			t.Fatalf("Get() = %q, %v, %v, want v, true, nil", got, ok, err)
 		}
 	}

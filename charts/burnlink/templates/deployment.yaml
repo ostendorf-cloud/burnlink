@@ -21,7 +21,7 @@ spec:
   {{ fail "ingress.enabled and httpRoute.enabled cannot both be true: pick one external route and turn the other off." }}
   {{- end }}
   {{- if not .Values.config.store.addr }}
-  {{ fail "config.store.addr must be set to the Redis-compatible store's host:port, for example dragonfly:6379; the service refuses to start without it." }}
+  {{ fail "config.store.addr must be set to the Redis-compatible store's host:port, for example valkey:6379; the service refuses to start without it." }}
   {{- end }}
   {{- if and .Values.existingSecret.name (not .Values.existingSecret.usernameKey) (not .Values.existingSecret.passwordKey) }}
   {{ fail "existingSecret.name is set but neither existingSecret.usernameKey nor existingSecret.passwordKey names a key in it." }}

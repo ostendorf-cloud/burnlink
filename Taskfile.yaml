@@ -75,14 +75,14 @@ tasks:
     desc: Helm chart lint
     cmds:
       # config.store.addr has no usable default, so a render needs one.
-      - helm lint charts/burnlink --set config.store.addr=dragonfly:6379
+      - helm lint charts/burnlink --set config.store.addr=valkey:6379
 
   validate:kubeconform:
     desc: Schema validation of the rendered Helm chart
     cmds:
       - |
         helm template charts/burnlink \
-          --set config.store.addr=dragonfly:6379 \
+          --set config.store.addr=valkey:6379 \
           --set existingSecret.name=burnlink-store \
           --set existingSecret.passwordKey=password \
           | kubeconform -strict -summary

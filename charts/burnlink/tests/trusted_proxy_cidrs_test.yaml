@@ -4,7 +4,7 @@ templates:
 set:
   config:
     store:
-      addr: dragonfly:6379
+      addr: valkey:6379
 tests:
   - it: fails the render when ingress is enabled and trustedProxyCidrs is left empty
     set:

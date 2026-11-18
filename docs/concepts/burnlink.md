@@ -22,7 +22,7 @@
 - Answer every link it will not serve, unknown, expired, already opened or malformed, with one
   indistinguishable response.
 - Run against any Redis-compatible store that speaks `SET NX PX` and `GETDEL`; the deployment
-  runs Dragonfly behind it.
+  runs Valkey behind it. The owner chose Valkey on 2026-11-18, replacing Dragonfly.
 
 ## Non goals
 
@@ -52,8 +52,9 @@
   taking it, open and delete it in one step. Config and version endpoints sit alongside them.
 - The store contract is two primitives: `SET NX PX` so a write never overwrites an existing
   secret, `GETDEL` so a reveal and a delete happen atomically and two readers cannot both win.
-- Everything above runs today only as a scaffold: the wiring exists, the crypto, the store client
-  and the three endpoints are the next milestone, not yet built.
+- Everything above runs today only as a scaffold: the wiring, the crypto and the store client
+  exist, and readiness reports the store; the three endpoints are the next milestone, not yet
+  built.
 
 ### Request link
 

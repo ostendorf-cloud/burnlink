@@ -8,7 +8,7 @@ templates:
 set:
   config:
     store:
-      addr: dragonfly:6379
+      addr: valkey:6379
 tests:
   - it: renders one replica by default
     template: templates/deployment.yaml
@@ -24,7 +24,7 @@ tests:
           path: spec.template.spec.containers[0].env
           value:
             - name: STORE_ADDR
-              value: dragonfly:6379
+              value: valkey:6379
       - isNull:
           path: spec.template.spec.volumes
       - isNull:

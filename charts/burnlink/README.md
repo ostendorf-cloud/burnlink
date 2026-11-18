@@ -6,7 +6,7 @@ health, readiness and metrics on a second, administrative listener.
 ## Install
 
 ```sh
-helm install burnlink charts/burnlink --set config.store.addr=dragonfly:6379
+helm install burnlink charts/burnlink --set config.store.addr=valkey:6379
 ```
 
 ## Values
@@ -36,7 +36,7 @@ feeds collapses every submitter onto the ingress controller's own pod address. S
 ingress controller's pod or Service CIDR.
 
 `config.store.addr` is required: the render fails without it. The chart deploys no store. Point
-it at a Redis-compatible server, for example Dragonfly, that speaks `SET NX PX` and `GETDEL`. The
+it at a Redis-compatible server, for example Valkey, that speaks `SET NX PX` and `GETDEL`. The
 pod reports unready while that store is unreachable.
 
 The store's credentials live in a Secret you create yourself. The chart never renders one from
@@ -45,7 +45,7 @@ files, wired into `STORE_USERNAME_FILE` and `STORE_PASSWORD_FILE`:
 
 ```sh
 helm install burnlink charts/burnlink \
-  --set config.store.addr=dragonfly:6379 \
+  --set config.store.addr=valkey:6379 \
   --set existingSecret.name=burnlink-store \
   --set existingSecret.passwordKey=password
 ```

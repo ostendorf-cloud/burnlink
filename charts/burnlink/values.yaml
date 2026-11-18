@@ -143,7 +143,7 @@ affinity: {}
 # the settings internal/config loads from the environment, and nothing else.
 config:
   # The Redis-compatible store the service keeps secrets in; the deployment
-  # runs Dragonfly. The chart deploys no store itself.
+  # runs Valkey. The chart deploys no store itself.
   store:
     # host:port, fed into STORE_ADDR. Required: templates/deployment.yaml
     # rejects a render that leaves it empty, because the service refuses to

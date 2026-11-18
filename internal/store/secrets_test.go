@@ -175,6 +175,55 @@ func TestTake(t *testing.T) {
 	}
 }
 
+// TestKeyspacesDoNotMeet proves a secret id cannot reach a request link key
+// and a request link key cannot reach a secret, whatever the id says.
+func TestKeyspacesDoNotMeet(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	// The two key shapes internal/webapp/requestlink writes.
+	linkKeys := []string{"requestlink:abc", "requestlink:abc:submission:0"}
+
+	for _, key := range linkKeys {
+		t.Run("secret id "+key, func(t *testing.T) {
+			t.Parallel()
+
+			f, _ := newFake()
+			s := store.NewSecrets(f)
+			if _, err := f.SetNX(ctx, key, []byte("link data"), time.Minute); err != nil {
+				t.Fatalf("SetNX() error = %v", err)
+			}
+
+			// Take with the link key as the id finds nothing and deletes nothing.
+			if _, err := s.Take(ctx, key); !errors.Is(err, store.ErrNotFound) {
+				t.Errorf("Take(%q) error = %v, want ErrNotFound", key, err)
+			}
+			// Put with the link key as the id does not collide with the link data.
+			if err := s.Put(ctx, key, []byte("secret"), time.Minute); err != nil {
+				t.Errorf("Put(%q) error = %v, want nil", key, err)
+			}
+			got, ok, err := f.Get(ctx, key)
+			if err != nil || !ok || string(got) != "link data" {
+				t.Errorf("link key %q = %q, %v, %v, want it untouched", key, got, ok, err)
+			}
+		})
+	}
+
+	t.Run("a secret is not readable as a plain key", func(t *testing.T) {
+		t.Parallel()
+
+		f, _ := newFake()
+		s := store.NewSecrets(f)
+		mustNil(t, s.Put(ctx, "abc", []byte("secret"), time.Minute))
+		if _, ok, _ := f.Get(ctx, "abc"); ok {
+			t.Error("raw key abc exists, want the secret under its prefix only")
+		}
+		if _, ok, _ := f.Get(ctx, store.SecretKeyPrefix+"abc"); !ok {
+			t.Errorf("key %q missing", store.SecretKeyPrefix+"abc")
+		}
+	})
+}
+
 func TestTakeBackendFailureIsNotNotFound(t *testing.T) {
 	t.Parallel()
 

@@ -40,16 +40,16 @@ func TestLoadStore(t *testing.T) {
 	}{
 		{
 			name: "address only",
-			env:  map[string]string{"STORE_ADDR": "dragonfly:6379"},
-			want: Store{Addr: "dragonfly:6379"},
+			env:  map[string]string{"STORE_ADDR": "valkey:6379"},
+			want: Store{Addr: "valkey:6379"},
 		},
 		{
 			name: "direct credentials and tls",
 			env: map[string]string{
-				"STORE_ADDR": "dragonfly:6379", "STORE_USERNAME": dummyUser,
+				"STORE_ADDR": "valkey:6379", "STORE_USERNAME": dummyUser,
 				"STORE_PASSWORD": dummyPassword, "STORE_TLS": "true",
 			},
-			want: Store{Addr: "dragonfly:6379", Username: dummyUser, Password: dummyPassword, TLS: true},
+			want: Store{Addr: "valkey:6379", Username: dummyUser, Password: dummyPassword, TLS: true},
 		},
 		{
 			name: "credentials from files",
@@ -86,9 +86,9 @@ func TestLoadStoreRejects(t *testing.T) {
 		want string
 	}{
 		{"missing address", map[string]string{}, "STORE_ADDR"},
-		{"address without port", map[string]string{"STORE_ADDR": "dragonfly"}, "STORE_ADDR"},
-		{"address with port zero", map[string]string{"STORE_ADDR": "dragonfly:0"}, "STORE_ADDR"},
-		{"address with text port", map[string]string{"STORE_ADDR": "dragonfly:http"}, "STORE_ADDR"},
+		{"address without port", map[string]string{"STORE_ADDR": "valkey"}, "STORE_ADDR"},
+		{"address with port zero", map[string]string{"STORE_ADDR": "valkey:0"}, "STORE_ADDR"},
+		{"address with text port", map[string]string{"STORE_ADDR": "valkey:http"}, "STORE_ADDR"},
 		{"address without host", map[string]string{"STORE_ADDR": ":6379"}, "STORE_ADDR"},
 		{"bad tls flag", map[string]string{"STORE_ADDR": "a:1", "STORE_TLS": "maybe"}, "STORE_TLS"},
 		{

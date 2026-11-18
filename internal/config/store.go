@@ -13,7 +13,7 @@ import (
 )
 
 // Store is how to reach the Redis-compatible store. The deployment runs
-// Dragonfly, but nothing here is specific to it.
+// Valkey, but nothing here is specific to it.
 //
 // Username and Password are credentials. Each one comes from its own
 // variable or from the file named by the variable with a _FILE suffix,

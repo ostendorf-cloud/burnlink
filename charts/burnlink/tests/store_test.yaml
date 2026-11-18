@@ -7,19 +7,19 @@ tests:
       - failedTemplate:
           errorMessage: >-
             config.store.addr must be set to the Redis-compatible store's host:port, for
-            example dragonfly:6379; the service refuses to start without it.
+            example valkey:6379; the service refuses to start without it.
 
   - it: wires the address and nothing about credentials by default
     set:
       config:
         store:
-          addr: dragonfly:6379
+          addr: valkey:6379
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: STORE_ADDR
-            value: dragonfly:6379
+            value: valkey:6379
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
@@ -30,7 +30,7 @@ tests:
     set:
       config:
         store:
-          addr: dragonfly:6379
+          addr: valkey:6379
           tls: true
     asserts:
       - contains:
@@ -43,7 +43,7 @@ tests:
     set:
       config:
         store:
-          addr: dragonfly:6379
+          addr: valkey:6379
       existingSecret:
         name: burnlink-store
         usernameKey: user
@@ -77,7 +77,7 @@ tests:
     set:
       config:
         store:
-          addr: dragonfly:6379
+          addr: valkey:6379
       existingSecret:
         name: burnlink-store
         passwordKey: pass
@@ -94,7 +94,7 @@ tests:
     set:
       config:
         store:
-          addr: dragonfly:6379
+          addr: valkey:6379
       existingSecret:
         name: burnlink-store
         passwordKey: pass
@@ -114,7 +114,7 @@ tests:
     set:
       config:
         store:
-          addr: dragonfly:6379
+          addr: valkey:6379
       existingSecret:
         name: burnlink-store
     asserts:
