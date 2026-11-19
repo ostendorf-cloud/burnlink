@@ -236,7 +236,8 @@ version │ flags │ salt (16, only with a passphrase) │ iv (12) │ cipherte
           </li>
         </ul>
         <p class="text-sm">
-          The legal privacy notice of the operator is a separate text and is not written here.
+          The operator's privacy notice states the same in legal terms:
+          <a class="text-accent-text hover:underline" href="/en/privacy">Privacy</a>.
         </p>
       </div>
     </GovueCard>

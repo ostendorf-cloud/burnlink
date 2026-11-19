@@ -9,7 +9,7 @@ const config: ReturnType<typeof defineConfigWithVueTs> = defineConfigWithVueTs(
   },
   {
     name: 'burnlink/ignores',
-    ignores: ['dist/**', 'node_modules/**'],
+    ignores: ['dist/**', '.ssr/**', 'node_modules/**'],
   },
   pluginVue.configs['flat/recommended'],
   vueTsConfigs.recommendedTypeChecked,

@@ -18,6 +18,12 @@ export default defineConfig({
     outDir: '../cmd/burnlink/dist',
     emptyOutDir: true,
   },
+  // The SSR bundle of the legal pages (task web:build, build:ssr) is run by
+  // plain Node, which cannot load govue's TypeScript and Vue sources from
+  // node_modules, so Vite bundles the package into it.
+  ssr: {
+    noExternal: ['@ostendorf-cloud/govue'],
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],

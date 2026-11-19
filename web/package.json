@@ -6,7 +6,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && pnpm run build:ssr && pnpm run prerender && pnpm run check:legal",
+    "build:ssr": "vite build --ssr src/site.ts --outDir .ssr --emptyOutDir",
+    "prerender": "govue-prerender --entry .ssr/site.js --template ../cmd/burnlink/dist/index.html --out-dir ../cmd/burnlink/dist",
+    "check:legal": "govue-check-legal --dir ../cmd/burnlink/dist",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

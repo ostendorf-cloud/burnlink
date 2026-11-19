@@ -43,7 +43,19 @@ describe('App', () => {
       '/security',
     )
     const footer = screen.getByRole('navigation', { name: 'Footer' })
-    expect(footer.querySelector('a')).toHaveAttribute('href', '/security')
+    expect(footer.querySelector('a[href="/security"]')).not.toBeNull()
+  })
+
+  it('links the imprint and the privacy page from the footer of every app page', () => {
+    for (const path of ['/', '/security', '/r/abc']) {
+      window.history.pushState({}, '', path)
+      const { unmount } = render(App)
+
+      const footer = screen.getByRole('navigation', { name: 'Footer' })
+      expect(footer.querySelector('a[href="/en/imprint"]')).not.toBeNull()
+      expect(footer.querySelector('a[href="/en/privacy"]')).not.toBeNull()
+      unmount()
+    }
   })
 
   it('offers a skip link and marks only the real current page', () => {

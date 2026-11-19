@@ -25,6 +25,8 @@ cmd/burnlink/dist/
 # Node, for the web/ package
 node_modules/
 dist/
+# The SSR bundle of the legal pages, an input of the prerender step.
+web/.ssr/
 coverage/
 *.log
 *.tsbuildinfo

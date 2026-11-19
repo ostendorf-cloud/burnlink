@@ -1,0 +1,259 @@
+<!-- Copyright 2026 Simon Ostendorf -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
+<script setup lang="ts">
+import { useLanguage } from '@ostendorf-cloud/govue'
+
+// The privacy text of burnlink, written from what the code and the repository
+// documents state: internal/store, internal/webapp/secrets,
+// internal/webapp/requestlink, docs/concepts/burnlink.md, the README section
+// "Page view counting" and the "What is counted" card of SecurityView.vue.
+// German and English say the same. A change to what the server stores, logs or
+// counts changes this text in the same commit.
+const { locale } = useLanguage()
+</script>
+
+<template>
+  <div v-if="locale === 'de'" class="flex flex-col gap-4 text-text" data-testid="privacy-de">
+    <h2 class="text-xl font-semibold text-text">Verantwortlicher</h2>
+    <p>
+      Simon Ostendorf, Frankenstr. 8, 52070 Aachen, Deutschland<br />
+      E-Mail:
+      <a class="text-accent-text hover:underline" href="mailto:info@burnlink.de">info@burnlink.de</a
+      ><br />
+      Telefon:
+      <a class="text-accent-text hover:underline" href="tel:+4915730971784">+49 1573 0971784</a>
+    </p>
+
+    <h2 class="text-xl font-semibold text-text">Was burnlink ist</h2>
+    <p>
+      burnlink gibt ein Geheimnis über einen Link weiter, der es genau einmal ausliefert. Es gibt
+      kein Konto und keine Anmeldung. Wie die Verschlüsselung funktioniert und welche Teile heute
+      schon laufen, steht auf der
+      <a class="text-accent-text hover:underline" href="/security">Sicherheitsseite</a>. Dieser Text
+      wiederholt sie nicht.
+    </p>
+
+    <h2 class="text-xl font-semibold text-text">Was der Server nie erhält</h2>
+    <p>
+      Der Browser verschlüsselt ein Geheimnis mit der Web-Crypto-Schnittstelle, bevor etwas
+      hochgeladen wird. Der Schlüssel steht in dem Teil des Links nach dem Zeichen #. Ein Browser
+      sendet diesen Teil nicht an einen Server. Der Server erhält deshalb weder einen Schlüssel noch
+      einen Klartext, auch keine Passphrase, keinen Dateinamen und keinen Dateiinhalt.
+    </p>
+
+    <h2 class="text-xl font-semibold text-text">Was gespeichert wird</h2>
+    <ul class="flex list-disc flex-col gap-2 pl-5">
+      <li>
+        Die verschlüsselten Daten genau so, wie sie ankamen, eine zufällige Kennung und der
+        Zeitpunkt des Ablaufs. Der Server kann die Daten nicht entschlüsseln.
+      </li>
+      <li>
+        Für einen Anfrage-Link zusätzlich seine Grenzen (Zahl und Größe der wartenden Einsendungen)
+        und ein SHA-256-Hash eines Werts, den nur der Browser des Eigentümers ableiten kann. Der
+        Server erhält weder den öffentlichen noch den privaten Schlüssel.
+      </li>
+      <li>Gespeichert wird in einem Redis-kompatiblen Speicher (Valkey), der zum Dienst gehört.</li>
+    </ul>
+
+    <h2 class="text-xl font-semibold text-text">Wie lange</h2>
+    <ul class="flex list-disc flex-col gap-2 pl-5">
+      <li>
+        Beim ersten Öffnen wird ein Geheimnis in demselben Schritt ausgeliefert und gelöscht. Ein
+        zweiter Abruf erhält nichts.
+      </li>
+      <li>
+        Wird es nicht geöffnet, läuft es mit seiner Lebensdauer ab. Der Absender wählt sie innerhalb
+        der Grenzen, die der Betreiber einstellt. Ohne andere Einstellung liegen diese bei einer
+        Minute bis sieben Tagen, und ohne Wahl gelten 24 Stunden. Mehr als 30 Tage lässt der Dienst
+        nicht zu.
+      </li>
+      <li>
+        Ein Anfrage-Link nimmt derzeit sieben Tage lang Einsendungen an. Eine Einsendung bleibt, bis
+        der Eigentümer sie öffnet oder der Link abläuft.
+      </li>
+      <li>
+        Abgelaufene und geöffnete Geheimnisse sind nicht zu unterscheiden. Der Dienst führt darüber
+        keine Aufzeichnung.
+      </li>
+    </ul>
+
+    <h2 class="text-xl font-semibold text-text">Protokoll des Servers</h2>
+    <p>
+      Der Server schreibt für jede Anfrage eine Protokollzeile: Methode, das Routenmuster (nicht der
+      Pfad, also nie die Kennung eines Links), Statuscode, Größe der Antwort, Dauer und die Adresse,
+      von der die Anfrage kam. Mit dieser Adresse begrenzt der Server außerdem, wie viele Anfragen
+      ein Client stellen darf.
+    </p>
+
+    <h2 class="text-xl font-semibold text-text">Zählung der Seitenaufrufe</h2>
+    <p>
+      Wenn der Betreiber sie eingeschaltet hat, zählt der Server Seitenaufrufe und meldet sie nach
+      der Auslieferung der Seite an Umami, ein Statistikwerkzeug. In Ihrem Browser läuft dafür
+      nichts, und es wird kein Cookie gesetzt. Richtet der Betreiber sie nicht ein, ist die Zählung
+      aus.
+    </p>
+    <ul class="flex list-disc flex-col gap-2 pl-5">
+      <li>
+        Gezählt wird das Routenmuster der Seite, zum Beispiel
+        <code class="font-mono">/security</code> oder
+        <code class="font-mono">/r/&#123;id&#125;</code>. Jeder Anfrage-Link ist der eine Eintrag
+        <code class="font-mono">/r/&#123;id&#125;</code>, nie seine Kennung.
+      </li>
+      <li>
+        Mitgesendet werden der Hostname der Seite, die erste Sprache, die Ihr Browser anfragt, Ihr
+        Browser und System als User-Agent, der Ursprung (Schema und Host, ohne Pfad) der Seite, von
+        der Sie kamen, und Ihre Adresse ohne ihren letzten Teil: bei IPv4 die ersten drei von vier
+        Zahlen, bei IPv6 die ersten 48 Bit. Umami leitet daraus Land, Region und Stadt ab.
+      </li>
+      <li>
+        Nicht gezählt werden die Kennung eines Links, der Schlüssel hinter dem #, eine
+        Query-Zeichenfolge, alles unter <code class="font-mono">/api</code>, Dateien, die die Seite
+        lädt, und die Health- und Metrik-Routen. Das Öffnen eines Geheimnisses ist kein Ereignis.
+      </li>
+      <li>
+        Gar nicht gezählt werden Besucher, die Do Not Track oder Global Privacy Control senden,
+        Prefetch-Anfragen, Bots und Clients mit privater Adresse.
+      </li>
+    </ul>
+
+    <h2 class="text-xl font-semibold text-text">Cookies und Speicher im Browser</h2>
+    <p>
+      Diese Seite setzt kein Cookie und lädt kein Skript von einer anderen Seite. Ihr Browser kann
+      eine Anzeigewahl (hell oder dunkel, Sprache) in seinem lokalen Speicher behalten. Sie wird
+      nicht an den Server gesendet. Ein Anfrage-Link legt den privaten Schlüssel des Eigentümers als
+      nicht exportierbaren Schlüssel in der IndexedDB dieses Browsers ab. Es gibt keine Kopie auf
+      dem Server.
+    </p>
+
+    <h2 class="text-xl font-semibold text-text">Ihre Rechte</h2>
+    <p>
+      Sie haben nach der Datenschutz-Grundverordnung das Recht auf Auskunft, Berichtigung, Löschung,
+      Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch, soweit die jeweilige
+      Voraussetzung vorliegt. Schreiben Sie dafür an die oben genannte E-Mail-Adresse. Sie haben
+      außerdem das Recht, sich bei einer Datenschutz-Aufsichtsbehörde zu beschweren.
+    </p>
+  </div>
+
+  <div v-else class="flex flex-col gap-4 text-text" data-testid="privacy-en">
+    <p class="text-text-muted">
+      The German text is the legally binding one.
+      <a class="text-accent-text hover:underline" href="/de/privacy">Read the German version</a>
+    </p>
+
+    <h2 class="text-xl font-semibold text-text">Controller</h2>
+    <p>
+      Simon Ostendorf, Frankenstr. 8, 52070 Aachen, Germany<br />
+      Email:
+      <a class="text-accent-text hover:underline" href="mailto:info@burnlink.de">info@burnlink.de</a
+      ><br />
+      Phone:
+      <a class="text-accent-text hover:underline" href="tel:+4915730971784">+49 1573 0971784</a>
+    </p>
+
+    <h2 class="text-xl font-semibold text-text">What burnlink is</h2>
+    <p>
+      burnlink passes a secret on through a link that hands it out exactly once. There is no account
+      and no sign-in. How the encryption works, and which parts already run today, is on the
+      <a class="text-accent-text hover:underline" href="/security">security page</a>. This text does
+      not repeat it.
+    </p>
+
+    <h2 class="text-xl font-semibold text-text">What the server never receives</h2>
+    <p>
+      The browser encrypts a secret with the Web Crypto interface before anything is uploaded. The
+      key sits in the part of the link after the # character. A browser does not send that part to a
+      server. The server therefore receives neither a key nor a plaintext, and no passphrase, file
+      name or file content either.
+    </p>
+
+    <h2 class="text-xl font-semibold text-text">What is stored</h2>
+    <ul class="flex list-disc flex-col gap-2 pl-5">
+      <li>
+        The encrypted data exactly as it arrived, a random id and the time of expiry. The server
+        cannot decrypt the data.
+      </li>
+      <li>
+        For a request link also its limits (the number and size of waiting submissions) and a
+        SHA-256 hash of a value only the owner's browser can derive. The server receives neither the
+        public key nor the private key.
+      </li>
+      <li>It is stored in a Redis compatible store (Valkey) that belongs to the service.</li>
+    </ul>
+
+    <h2 class="text-xl font-semibold text-text">For how long</h2>
+    <ul class="flex list-disc flex-col gap-2 pl-5">
+      <li>
+        The first time a secret is opened, it is handed out and deleted in the same step. A second
+        request gets nothing.
+      </li>
+      <li>
+        If it is not opened, it expires with its lifetime. The sender chooses it within limits the
+        operator configures. Unless set otherwise, the limits are one minute to seven days, and 24
+        hours applies when none is chosen. The service allows no more than 30 days.
+      </li>
+      <li>
+        A request link currently accepts submissions for seven days. A submission stays until the
+        owner opens it or the link expires.
+      </li>
+      <li>
+        An expired secret and an opened one cannot be told apart. The service keeps no record of
+        either.
+      </li>
+    </ul>
+
+    <h2 class="text-xl font-semibold text-text">Server log</h2>
+    <p>
+      For every request the server writes one log line: the method, the route pattern (not the path,
+      so never the id of a link), the status code, the size of the answer, the duration and the
+      address the request came from. The server also uses that address to limit how many requests a
+      client may make.
+    </p>
+
+    <h2 class="text-xl font-semibold text-text">Page view counting</h2>
+    <p>
+      If the operator has turned it on, the server counts page views and reports them to Umami, a
+      statistics tool, after the page was served. Nothing runs in your browser for this, and no
+      cookie is set. Unless the operator sets it up, the counting is off.
+    </p>
+    <ul class="flex list-disc flex-col gap-2 pl-5">
+      <li>
+        Counted is the route pattern of the page, for example
+        <code class="font-mono">/security</code> or
+        <code class="font-mono">/r/&#123;id&#125;</code>. Every request link is the one entry
+        <code class="font-mono">/r/&#123;id&#125;</code>, never its id.
+      </li>
+      <li>
+        Sent with it are the site's host name, the first language your browser asks for, your
+        browser and system as its user agent, the origin (scheme and host, no path) of the page that
+        referred you, and your address without its last part: the first three of four numbers for
+        IPv4, the first 48 bits for IPv6. Umami derives country, region and city from it.
+      </li>
+      <li>
+        Not counted are the id of a link, the key after the #, a query string, anything under
+        <code class="font-mono">/api</code>, files the page loads, and the health and metrics
+        routes. Opening a secret is not an event.
+      </li>
+      <li>
+        Not counted at all are visitors who send Do Not Track or Global Privacy Control, prefetch
+        requests, bots and clients on a private address.
+      </li>
+    </ul>
+
+    <h2 class="text-xl font-semibold text-text">Cookies and browser storage</h2>
+    <p>
+      This site sets no cookie and loads no script from another site. Your browser may keep a
+      display choice (light or dark, language) in its local storage. It is not sent to the server. A
+      request link stores the owner's private key as a key that cannot be exported in this browser's
+      IndexedDB. There is no copy on the server.
+    </p>
+
+    <h2 class="text-xl font-semibold text-text">Your rights</h2>
+    <p>
+      Under the General Data Protection Regulation you have the right to access, rectification,
+      erasure, restriction of processing, data portability and objection, where the respective
+      conditions are met. Write to the email address above. You also have the right to lodge a
+      complaint with a data protection supervisory authority.
+    </p>
+  </div>
+</template>
