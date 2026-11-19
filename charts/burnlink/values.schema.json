@@ -84,6 +84,28 @@
       "type": "object",
       "properties": {
         "trustedProxyCidrs": { "type": "string" },
+        "siteHost": {
+          "type": "string",
+          "description": "Public host of the site, fed into SITE_HOST. Required when config.umami is set; enforced by a template fail guard.",
+          "pattern": "^[^/@?# \\t]*$"
+        },
+        "umami": {
+          "type": "object",
+          "description": "Page view counting through Umami. Off unless both values are set. Neither is a secret.",
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "Base URL of the Umami instance, fed into UMAMI_URL.",
+              "pattern": "^(https?://[^/?#@]+(/[^?#]*)?)?$"
+            },
+            "websiteId": {
+              "type": "string",
+              "description": "UUID of the website in Umami, fed into UMAMI_WEBSITE_ID.",
+              "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$"
+            }
+          },
+          "additionalProperties": false
+        },
         "secrets": {
           "type": "object",
           "description": "Limits of a stored secret. An empty value leaves the application default in place.",

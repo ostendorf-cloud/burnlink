@@ -35,6 +35,12 @@ The global baseline already applies here and is not repeated below.
   will not serve gets one fixed 404, see "API surface" in `docs/concepts/burnlink.md`. It uses
   govue's `ratelimit`, `clientip`, `csrf` and `api`, and `internal/buildinfo` for the version.
   `internal/config` also loads `SECRET_*` and `RATE_LIMIT_*`, none of them secret shaped.
+- Page views are counted by govue's `analytics`, wired in `cmd/burnlink` directly around the mux
+  (innermost: it reads the route pattern the mux sets, which `RequestID` and the security
+  middleware would hide). `UMAMI_URL`, `UMAMI_WEBSITE_ID` and `SITE_HOST` come from
+  `internal/config`. Never count an id, a query or an API route; the tests in
+  `cmd/burnlink/analytics_test.go` pin that. A change to what is reported also changes the
+  "What is counted" card in `SecurityView.vue`.
 - `internal/webapp/requestlink` answers the request link's own endpoints: create a link, submit a
   sealed payload to it, and open everything waiting for the owner. Written against
   `internal/store.Store`, not against `memstore` directly, so swapping in the real client changes

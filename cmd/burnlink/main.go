@@ -15,8 +15,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
+	"github.com/ostendorf-cloud/govue/analytics"
 	"github.com/ostendorf-cloud/govue/clientip"
 	"github.com/ostendorf-cloud/govue/health"
 	"github.com/ostendorf-cloud/govue/httpserver"
@@ -63,7 +66,16 @@ func run() error {
 	// receives traffic, and it backs the secret endpoints.
 	secrets := store.NewSecrets(client)
 
-	publicHandler, err := buildHandler(logger, cfg, secrets)
+	// Page views are counted from the server, off unless both UMAMI_URL and
+	// UMAMI_WEBSITE_ID are set. The queued views are sent on shutdown within
+	// a bounded time.
+	views, err := newViews(logger, cfg, nil)
+	if err != nil {
+		return err
+	}
+	defer closeViews(logger, views)
+
+	publicHandler, err := buildPublicHandler(logger, cfg, secrets, views)
 	if err != nil {
 		return err
 	}
@@ -102,11 +114,61 @@ func addStoreCheck(registry *health.Registry, p pinger) {
 	registry.Add("store", 0, p.Ping)
 }
 
-// buildHandler serves the embedded SPA bundle and the secret API behind
+// viewsCloseTimeout bounds how long shutdown waits for queued page views.
+const viewsCloseTimeout = 5 * time.Second
+
+// newViews builds the page view counter. httpClient is nil in production,
+// which gives govue's default client (no proxy, no cookies, no redirects).
+// Without UMAMI_URL and UMAMI_WEBSITE_ID the client is inert.
+func newViews(logger *slog.Logger, cfg config.Config, httpClient *http.Client) (*analytics.Client, error) {
+	views, err := analytics.New(cfg.Umami, analytics.Options{
+		Hostname:   cfg.SiteHost,
+		Logger:     logger,
+		HTTPClient: httpClient,
+		ClientIP:   clientip.NewResolver(cfg.TrustedProxies),
+		// Only pages are counted. The API answers JSON, which govue leaves
+		// out already, and this keeps an API route out whatever it answers.
+		Skip: func(r *http.Request) bool {
+			return r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/")
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("burnlink: %w", err)
+	}
+	if views.Enabled() {
+		logger.Info("page view counting is on")
+	} else {
+		logger.Info("page view counting is off")
+	}
+	return views, nil
+}
+
+// closeViews sends the queued views within viewsCloseTimeout.
+func closeViews(logger *slog.Logger, views *analytics.Client) {
+	ctx, cancel := context.WithTimeout(context.Background(), viewsCloseTimeout)
+	defer cancel()
+	if err := views.Close(ctx); err != nil {
+		logger.Warn("page views were lost on shutdown", "error", err)
+	}
+}
+
+// buildHandler is buildPublicHandler with page view counting off.
+func buildHandler(logger *slog.Logger, cfg config.Config, vault secrets.Vault) (http.Handler, error) {
+	off, err := analytics.New(analytics.Config{}, analytics.Options{})
+	if err != nil {
+		return nil, fmt.Errorf("burnlink: %w", err)
+	}
+	return buildPublicHandler(logger, cfg, vault, off)
+}
+
+// buildPublicHandler serves the embedded SPA bundle and the secret API behind
 // govue's default security headers and access log. The client address, for
 // the rate limit and the access log alike, is resolved from the trusted
-// proxy ranges in cfg.
-func buildHandler(logger *slog.Logger, cfg config.Config, vault secrets.Vault) (http.Handler, error) {
+// proxy ranges in cfg. views counts a page view after the page was served.
+// It wraps the mux directly, innermost, because it reads the route pattern
+// the mux sets: RequestID and the security middleware replace the request,
+// which would hide the pattern from it.
+func buildPublicHandler(logger *slog.Logger, cfg config.Config, vault secrets.Vault, views *analytics.Client) (http.Handler, error) {
 	dist, err := fs.Sub(distFS, "dist")
 	if err != nil {
 		return nil, fmt.Errorf("burnlink: %w", err)
@@ -128,7 +190,17 @@ func buildHandler(logger *slog.Logger, cfg config.Config, vault secrets.Vault) (
 
 	mux := http.NewServeMux()
 	api.Register(mux)
-	files := http.FileServerFS(dist)
+	fileServer := http.FileServerFS(dist)
+	// The file server lists a directory as an HTML page. That page is no
+	// page of the site and must not be counted as "/", so any path ending in
+	// a slash other than the root answers 404.
+	files := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" && strings.HasSuffix(r.URL.Path, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		fileServer.ServeHTTP(w, r)
+	})
 	mux.Handle("/", files)
 	// The SPA tells its pages apart by their path alone, so the server
 	// answers exactly the paths App.vue knows with index.html instead of a
@@ -150,7 +222,7 @@ func buildHandler(logger *slog.Logger, cfg config.Config, vault secrets.Vault) (
 	accessLog := middleware.AccessLog{ClientIP: clientIPs}
 	security := middleware.DefaultSecurity()
 
-	return middleware.Chain(mux,
+	return middleware.Chain(views.Middleware(mux),
 		middleware.Recover(logger),
 		middleware.RequestID(logger),
 		security.Middleware,

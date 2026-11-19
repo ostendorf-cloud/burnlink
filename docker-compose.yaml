@@ -21,6 +21,8 @@ services:
       SECRET_LIFETIME_DEFAULT: "24h"
       RATE_LIMIT_BURST: "10"
       RATE_LIMIT_PER: "1m"
+      # Page view counting is off here. To try it, set UMAMI_URL,
+      # UMAMI_WEBSITE_ID and SITE_HOST together; see .env.example.
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:8081:8081"

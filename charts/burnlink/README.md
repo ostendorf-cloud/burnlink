@@ -32,6 +32,15 @@ helm install burnlink charts/burnlink --set config.store.addr=valkey:6379
 | `config.secrets.lifetimeDefault` | Lifetime used when none is asked for, wired into `SECRET_LIFETIME_DEFAULT` | unset, application default `24h` |
 | `config.rateLimit.burst` | Requests per client address at once, wired into `RATE_LIMIT_BURST` | unset, application default `10` |
 | `config.rateLimit.per` | Period over which the burst refills, wired into `RATE_LIMIT_PER` | unset, application default `1m` |
+| `config.siteHost` | Public host reported to Umami, wired into `SITE_HOST`. Required when `config.umami` is set | `""` |
+| `config.umami.url` | Base URL of the Umami instance, wired into `UMAMI_URL`. Not a secret | `""`, counting off |
+| `config.umami.websiteId` | UUID of the website in Umami, wired into `UMAMI_WEBSITE_ID`. Not a secret | `""`, counting off |
+
+Page view counting is off unless `config.umami.url` and `config.umami.websiteId` are both set.
+Setting one alone, or both without `config.siteHost`, fails the render. With none of them set the
+release works as before. The schema accepts a plain `http` `config.umami.url`, but the
+application refuses it at startup unless the host is `localhost`, a loopback address or a name
+inside the cluster.
 
 The rate limit budget lives in each pod, so a release with several replicas allows the burst once
 per replica.

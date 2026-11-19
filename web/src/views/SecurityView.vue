@@ -198,6 +198,49 @@ version │ flags │ salt (16, only with a passphrase) │ iv (12) │ cipherte
       </ul>
     </GovueCard>
 
+    <GovueCard as="section" title="What is counted">
+      <div class="flex flex-col gap-4 text-base text-text-muted" data-testid="counting">
+        <p>
+          If the operator has turned it on, the server counts page views and reports them to Umami,
+          a statistics tool, after the page was served. Nothing runs in your browser and no cookie
+          is set.
+        </p>
+        <ul class="flex list-disc flex-col gap-2 pl-5">
+          <li>
+            Counted: a visit to a page, as the name of the page only, for example
+            <code class="font-mono text-text">/security</code> or
+            <code class="font-mono text-text">/r/&#123;id&#125;</code>. The second is one entry for
+            every link, not one per link.
+          </li>
+          <li>
+            Also sent with it: the site's own host name, the first language your browser asks for,
+            your browser and system as its user agent, the site that referred you (its origin,
+            scheme and host, no path), and your address with its last part removed: the first three
+            of four numbers for IPv4, the first 48 bits for IPv6. Umami derives country, region and
+            city from it.
+          </li>
+          <li>
+            Not counted: the id of a link, the key after the
+            <code class="font-mono text-text">#</code>, a query string, anything under
+            <code class="font-mono text-text">/api</code>, a file the page loads, and the health and
+            metrics routes. Opening a secret is not recorded as an event.
+          </li>
+          <li>
+            Not counted at all: a visitor who sends Do Not Track or Global Privacy Control, a
+            prefetch, a bot, and a client on a private address.
+          </li>
+          <li>
+            The server still never receives a key or a plaintext. Counting changes none of that: the
+            key stays in the part of the link after the
+            <code class="font-mono text-text">#</code>, which a browser does not send.
+          </li>
+        </ul>
+        <p class="text-sm">
+          The legal privacy notice of the operator is a separate text and is not written here.
+        </p>
+      </div>
+    </GovueCard>
+
     <GovueCard as="section" title="Where this stops helping">
       <ul class="flex list-disc flex-col gap-2 pl-5 text-base text-text-muted">
         <li>
