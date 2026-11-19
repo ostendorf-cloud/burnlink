@@ -90,9 +90,13 @@ const { locale } = useLanguage()
     <ul class="flex list-disc flex-col gap-2 pl-5">
       <li>
         Gezählt wird das Routenmuster der Seite, zum Beispiel
-        <code class="font-mono">/security</code> oder
-        <code class="font-mono">/r/&#123;id&#125;</code>. Jeder Anfrage-Link ist der eine Eintrag
-        <code class="font-mono">/r/&#123;id&#125;</code>, nie seine Kennung.
+        <code class="font-mono">/security</code>,
+        <code class="font-mono">/s/&#123;id&#125;</code> oder
+        <code class="font-mono">/r/&#123;id&#125;</code>. Jeder Link zu einem Geheimnis ist der eine
+        Eintrag <code class="font-mono">/s/&#123;id&#125;</code> und jeder Anfrage-Link der eine
+        Eintrag <code class="font-mono">/r/&#123;id&#125;</code>, nie die Kennung. Das Laden der
+        Seite hinter einem Link zu einem Geheimnis wird als Seitenaufruf gezählt, das Öffnen des
+        Geheimnisses nicht.
       </li>
       <li>
         Mitgesendet werden der Hostname der Seite, die erste Sprache, die Ihr Browser anfragt, Ihr
@@ -116,7 +120,13 @@ const { locale } = useLanguage()
       Diese Seite setzt kein Cookie und lädt kein Skript von einer anderen Seite. Ihr Browser kann
       eine Anzeigewahl (hell oder dunkel, Sprache) in seinem lokalen Speicher behalten. Sie wird
       nicht an den Server gesendet. Darüber hinaus legt diese Seite heute nichts im Speicher Ihres
-      Browsers ab.
+      Browsers ab. Ein Geheimnis, sein Klartext, der Schlüssel und eine Passphrase bleiben nur im
+      Arbeitsspeicher der geöffneten Seite und werden nirgends gespeichert. Beim Verlassen der Seite
+      löscht sie diese Inhalte aus dem Arbeitsspeicher. Nach dem Öffnen entfernt die Seite den
+      Schlüssel aus der Adresszeile. Der Link selbst steht in der Zwischenablage, und Ihr Browser
+      zeichnet ihn beim Laden der Seite samt Schlüssel in seinem Verlauf auf. Das Entfernen aus der
+      Adresszeile löscht diesen Verlaufseintrag nicht. Ein noch nicht geöffneter Link kann daher von
+      jemandem mit Zugriff auf Ihren Browser geöffnet werden.
     </p>
 
     <h2 class="text-xl font-semibold text-text">Ihre Rechte</h2>
@@ -204,9 +214,12 @@ const { locale } = useLanguage()
     <ul class="flex list-disc flex-col gap-2 pl-5">
       <li>
         Counted is the route pattern of the page, for example
-        <code class="font-mono">/security</code> or
-        <code class="font-mono">/r/&#123;id&#125;</code>. Every request link is the one entry
-        <code class="font-mono">/r/&#123;id&#125;</code>, never its id.
+        <code class="font-mono">/security</code>,
+        <code class="font-mono">/s/&#123;id&#125;</code> or
+        <code class="font-mono">/r/&#123;id&#125;</code>. Every link to a secret is the one entry
+        <code class="font-mono">/s/&#123;id&#125;</code> and every request link the one entry
+        <code class="font-mono">/r/&#123;id&#125;</code>, never the id. Loading the page behind a
+        link to a secret counts as a page view. Opening the secret does not.
       </li>
       <li>
         Sent with it are the site's host name, the first language your browser asks for, your
@@ -229,7 +242,13 @@ const { locale } = useLanguage()
     <p>
       This site sets no cookie and loads no script from another site. Your browser may keep a
       display choice (light or dark, language) in its local storage. It is not sent to the server.
-      Beyond that, this site stores nothing in your browser's storage today.
+      Beyond that, this site stores nothing in your browser's storage today. A secret, its
+      plaintext, the key and a passphrase stay in the memory of the open page only and are saved
+      nowhere. When you leave the page, it clears them from memory. After a reveal, the page removes
+      the key from the address bar. The link itself is in your clipboard, and your browser records
+      it with the key in its history when the page loads. Removing the key from the address bar does
+      not delete that history entry, so someone with access to your browser can still open a link
+      that was not revealed yet.
     </p>
 
     <h2 class="text-xl font-semibold text-text">Your rights</h2>

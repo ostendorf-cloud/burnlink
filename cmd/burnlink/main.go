@@ -204,7 +204,7 @@ func buildPublicHandler(logger *slog.Logger, cfg config.Config, vault secrets.Va
 	mux.Handle("/", files)
 	// The SPA tells its pages apart by their path alone, so the server
 	// answers exactly the paths App.vue knows with index.html instead of a
-	// 404: /security and /r/<id>. Everything else, /api/ included, stays
+	// 404: /security, /r/<id> and /s/<id>. Everything else, /api/ included, stays
 	// with the file server and answers 404 when no such file exists. A GET
 	// pattern also matches HEAD. {id} spans one non-empty path segment, the
 	// same shape App.vue's own /r/<id> match accepts, so /r/ and /r/a/b stay
@@ -218,6 +218,15 @@ func buildPublicHandler(logger *slog.Logger, cfg config.Config, vault secrets.Va
 	}
 	mux.HandleFunc("GET /security", index)
 	mux.HandleFunc("GET /r/{id}", index)
+	// A secret link's page is never stored or indexed: no-store keeps it out of
+	// the back/forward cache and the HTTP cache, so a Back navigation loads it
+	// again instead of restoring a page that showed a secret, and noindex
+	// keeps a crawler that found the address from listing it.
+	mux.HandleFunc("GET /s/{id}", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Robots-Tag", "noindex")
+		index(w, r)
+	})
 	if err := mountLegal(mux, dist, cfg.SiteURL); err != nil {
 		return nil, err
 	}

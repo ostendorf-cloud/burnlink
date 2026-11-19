@@ -234,6 +234,64 @@ func TestPublicHandlerServesIndexHTMLOnSecurityPath(t *testing.T) {
 	}
 }
 
+// TestPublicHandlerSecretLinkPageIsNotStoredOrIndexed proves /s/<id> answers
+// with no-store and noindex, on GET and HEAD, and that the other SPA pages
+// do not inherit them.
+func TestPublicHandlerSecretLinkPageIsNotStoredOrIndexed(t *testing.T) {
+	handler, err := buildHandler(testLogger(), testConfig(t), testVault())
+	if err != nil {
+		t.Fatalf("buildHandler() error = %v", err)
+	}
+
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		for _, path := range []string{"/s/abc123", "/s/abc123?x=1"} {
+			req := httptest.NewRequestWithContext(t.Context(), method, path, nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("%s %s status = %d, want %d", method, path, rec.Code, http.StatusOK)
+			}
+			if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+				t.Errorf("%s %s Cache-Control = %q, want no-store", method, path, got)
+			}
+			if got := rec.Header().Get("X-Robots-Tag"); got != "noindex" {
+				t.Errorf("%s %s X-Robots-Tag = %q, want noindex", method, path, got)
+			}
+			if rec.Header().Get("Content-Security-Policy") == "" {
+				t.Errorf("%s %s lost its Content-Security-Policy header", method, path)
+			}
+		}
+	}
+
+	// The 404s carry neither header: they are not the page.
+	for _, path := range []string{"/s/", "/s/a/b", "/s/abc123/"} {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("GET %s status = %d, want %d", path, rec.Code, http.StatusNotFound)
+		}
+		if got := rec.Header().Get("X-Robots-Tag"); got != "" {
+			t.Errorf("GET %s X-Robots-Tag = %q, want none", path, got)
+		}
+	}
+
+	// /security keeps its own headers.
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/security", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /security status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Cache-Control"); got == "no-store" {
+		t.Errorf("GET /security Cache-Control = %q, want the page's own value", got)
+	}
+	if got := rec.Header().Get("X-Robots-Tag"); got != "" {
+		t.Errorf("GET /security X-Robots-Tag = %q, want none", got)
+	}
+}
+
 // TestPublicHandlerSecurityPathStaysNarrow proves the /security route does
 // not widen what the server answers: a trailing slash, an unknown path and
 // a non-GET method keep their previous status.
@@ -293,6 +351,16 @@ func TestPublicHandlerSPAFallback(t *testing.T) {
 		{"request link bare prefix", http.MethodGet, "/r", http.StatusNotFound, false},
 		{"request link nested", http.MethodGet, "/r/a/b", http.StatusNotFound, false},
 		{"request link post", http.MethodPost, "/r/abc123", http.StatusNotFound, false},
+		{"secret link", http.MethodGet, "/s/abc123", http.StatusOK, true},
+		{"secret link with query", http.MethodGet, "/s/abc123?x=1", http.StatusOK, true},
+		{"secret link head", http.MethodHead, "/s/abc123", http.StatusOK, false},
+		{"secret link escaped slash", http.MethodGet, "/s/a%2Fb", http.StatusOK, true},
+		{"secret link trailing slash", http.MethodGet, "/s/abc123/", http.StatusNotFound, false},
+		{"secret link empty id", http.MethodGet, "/s/", http.StatusNotFound, false},
+		{"secret link bare prefix", http.MethodGet, "/s", http.StatusNotFound, false},
+		{"secret link nested", http.MethodGet, "/s/a/b", http.StatusNotFound, false},
+		{"secret link post", http.MethodPost, "/s/abc123", http.StatusNotFound, false},
+		{"api under s", http.MethodGet, "/s/api/v1/x", http.StatusNotFound, false},
 		{"unknown path", http.MethodGet, "/no-such-page", http.StatusNotFound, false},
 		{"api unknown", http.MethodGet, "/api/v1/nothing", http.StatusNotFound, false},
 		{"api request link path", http.MethodGet, "/api/v1/request-links/abc123", http.StatusNotFound, false},

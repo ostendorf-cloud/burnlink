@@ -45,6 +45,7 @@ describe('legal pages', () => {
 
       const text = container.textContent ?? ''
       expect(text).toContain('/r/{id}')
+      expect(text).toContain('/s/{id}')
       expect(text).toContain('/api')
       expect(text).toContain('48')
       expect(text).toContain('Umami')
@@ -54,6 +55,22 @@ describe('legal pages', () => {
       expect(security).not.toBeNull()
     },
   )
+
+  it.each([
+    [
+      'de',
+      /beim Laden der Seite samt Schlüssel in seinem Verlauf auf[\s\S]*löscht diesen Verlaufseintrag nicht/,
+    ],
+    ['en', /in its history when the page loads[\s\S]*does not delete that history entry/],
+  ] as const)('the %s privacy text says the recipient history keeps the link', (locale, re) => {
+    const { container } = mount('privacy', locale)
+
+    const text = (container.textContent ?? '').replace(/\s+/g, ' ')
+    expect(text).toMatch(re)
+    expect(text).not.toMatch(
+      /Verlauf Ihres Browsers, wenn Sie ihn dort ablegen|if you put it there/,
+    )
+  })
 
   it('the English pages point to the binding German text', () => {
     mount('imprint', 'en')

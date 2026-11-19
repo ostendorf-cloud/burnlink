@@ -55,8 +55,20 @@
   secret, `GETDEL` so a reveal and a delete happen atomically and two readers cannot both win.
   The check that asks without taking is a third, a plain `GET`. Valkey's `GET` does not touch the
   key's TTL, so asking never extends a lifetime.
-- The wiring, the store client and the five endpoints exist, and readiness reports the store.
-  The page that calls them is the next milestone.
+- The wiring, the store client, the five endpoints and the page that calls them exist, and
+  readiness reports the store.
+- The sender's page encrypts under a fresh 32 byte link key, stores the payload and shows
+  `/s/<id>#<key>`. The recipient's page at `/s/<id>` checks that the fragment holds a valid key,
+  then waits for a click before it calls the open endpoint, so a preview that loads the page does
+  not burn the link. It decrypts in the browser and strips the key from the address bar. The
+  server has already deleted the secret by then, so a passphrase is asked for after the fetch and
+  the payload is kept in the page's memory for retries. Closing the page loses the secret.
+  The recipient's browser history still records `/s/<id>#<key>` when the page loads, and
+  `replaceState` does not remove that entry: an unrevealed link there can be opened by someone
+  with local access. The page is served `no-store` and `noindex`, and it wipes the key, the
+  payload and the plaintext when it is hidden or unmounted. An offline brute force of a weak
+  passphrase by someone holding the link is a property of the design; the page tells senders to
+  choose a strong one. Argon2id instead of PBKDF2 would be a format change.
 
 ### API surface
 

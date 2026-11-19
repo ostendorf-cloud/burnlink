@@ -49,10 +49,25 @@ describe('SecurityView', () => {
   it('says which parts are not running yet', () => {
     render(SecurityView)
 
-    expect(screen.getByTestId('status')).toHaveTextContent(
-      /no page of this site calls that API yet/i,
-    )
-    expect(screen.getByTestId('status')).toHaveTextContent(/not part of any page you can use/i)
+    const status = screen.getByTestId('status')
+    expect(status).toHaveTextContent(/sharing and revealing an ordinary secret runs/i)
+    expect(status).toHaveTextContent(/not running yet: the request link/i)
+    expect(status).not.toHaveTextContent(/no page of this site calls/i)
+  })
+
+  it('counts the secret link by its pattern and says opening is not counted', () => {
+    render(SecurityView)
+
+    const counting = screen.getByTestId('counting')
+    expect(counting).toHaveTextContent(/\/s\/\{id\}/)
+    expect(counting).toHaveTextContent(/opening the secret is a call to the api and is not/i)
+  })
+
+  it('tells the reader a preview does not use a link up, and what a wrong passphrase costs', () => {
+    render(SecurityView)
+
+    expect(screen.getByText(/does not use the link up/i)).toBeVisible()
+    expect(screen.getByText(/gone for good/i)).toBeVisible()
   })
 
   it('names what the server holds and sees besides the payload', () => {
@@ -81,5 +96,15 @@ describe('SecurityView', () => {
 
     expect(screen.getByText(/anyone who gets the link gets the secret/i)).toBeVisible()
     expect(screen.getByText(/could serve different code/i)).toBeVisible()
+  })
+
+  it("names the recipient's history, not the sender's, and that replaceState keeps the entry", () => {
+    render(SecurityView)
+
+    const item = screen.getByText(/recipient's browser records the whole link/i)
+    expect(item).toBeVisible()
+    expect(item.textContent).toMatch(/does not remove that history entry/)
+    expect(item.textContent).toMatch(/never revealed can\s+still be opened/)
+    expect(screen.queryByText(/sender's browser history/i)).not.toBeInTheDocument()
   })
 })
