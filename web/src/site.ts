@@ -15,6 +15,22 @@ import { legalPages } from './legal/pages'
 
 export const ORIGIN = 'https://burnlink.de'
 
+// The URLs of a secret and of a request link are secrets themselves, and the
+// API is no page: no crawler has a reason to visit them. The legal pages stay
+// crawlable.
+export const ROBOTS = [
+  'User-agent: *',
+  'Disallow: /r/',
+  'Disallow: /s/',
+  'Disallow: /api/',
+  'Allow: /de/imprint',
+  'Allow: /en/imprint',
+  'Allow: /de/privacy',
+  'Allow: /en/privacy',
+  `Sitemap: ${ORIGIN}/sitemap.xml`,
+  '',
+].join('\n')
+
 const routes = legalRouteDefs(legalPages)
 const records = legalRoutes(legalPages)
 
@@ -37,8 +53,5 @@ export async function files(template: string): Promise<PrerenderFile[]> {
         },
       }),
   })
-  return [
-    ...pages,
-    { path: 'robots.txt', content: `User-agent: *\nAllow: /\nSitemap: ${ORIGIN}/sitemap.xml\n` },
-  ]
+  return [...pages, { path: 'robots.txt', content: ROBOTS }]
 }

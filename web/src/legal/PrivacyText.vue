@@ -48,11 +48,6 @@ const { locale } = useLanguage()
         Die verschlüsselten Daten genau so, wie sie ankamen, eine zufällige Kennung und der
         Zeitpunkt des Ablaufs. Der Server kann die Daten nicht entschlüsseln.
       </li>
-      <li>
-        Für einen Anfrage-Link zusätzlich seine Grenzen (Zahl und Größe der wartenden Einsendungen)
-        und ein SHA-256-Hash eines Werts, den nur der Browser des Eigentümers ableiten kann. Der
-        Server erhält weder den öffentlichen noch den privaten Schlüssel.
-      </li>
       <li>Gespeichert wird in einem Redis-kompatiblen Speicher (Valkey), der zum Dienst gehört.</li>
     </ul>
 
@@ -69,12 +64,9 @@ const { locale } = useLanguage()
         nicht zu.
       </li>
       <li>
-        Ein Anfrage-Link nimmt derzeit sieben Tage lang Einsendungen an. Eine Einsendung bleibt, bis
-        der Eigentümer sie öffnet oder der Link abläuft.
-      </li>
-      <li>
-        Abgelaufene und geöffnete Geheimnisse sind nicht zu unterscheiden. Der Dienst führt darüber
-        keine Aufzeichnung.
+        Abgelaufene und geöffnete Geheimnisse sind nicht zu unterscheiden. Nichts zeichnet auf,
+        welches Geheimnis geöffnet wurde: Das Protokoll (siehe unten) enthält das Routenmuster, nie
+        die Kennung.
       </li>
     </ul>
 
@@ -82,8 +74,10 @@ const { locale } = useLanguage()
     <p>
       Der Server schreibt für jede Anfrage eine Protokollzeile: Methode, das Routenmuster (nicht der
       Pfad, also nie die Kennung eines Links), Statuscode, Größe der Antwort, Dauer und die Adresse,
-      von der die Anfrage kam. Mit dieser Adresse begrenzt der Server außerdem, wie viele Anfragen
-      ein Client stellen darf.
+      von der die Anfrage kam. Jede Zeile trägt außerdem den Zeitpunkt und eine zufällige
+      Anfragekennung. Auch das Öffnen eines Geheimnisses schreibt eine solche Zeile, ohne dessen
+      Kennung. Mit dieser Adresse begrenzt der Server außerdem, wie viele Anfragen ein Client
+      stellen darf.
     </p>
 
     <h2 class="text-xl font-semibold text-text">Zählung der Seitenaufrufe</h2>
@@ -121,9 +115,8 @@ const { locale } = useLanguage()
     <p>
       Diese Seite setzt kein Cookie und lädt kein Skript von einer anderen Seite. Ihr Browser kann
       eine Anzeigewahl (hell oder dunkel, Sprache) in seinem lokalen Speicher behalten. Sie wird
-      nicht an den Server gesendet. Ein Anfrage-Link legt den privaten Schlüssel des Eigentümers als
-      nicht exportierbaren Schlüssel in der IndexedDB dieses Browsers ab. Es gibt keine Kopie auf
-      dem Server.
+      nicht an den Server gesendet. Darüber hinaus legt diese Seite heute nichts im Speicher Ihres
+      Browsers ab.
     </p>
 
     <h2 class="text-xl font-semibold text-text">Ihre Rechte</h2>
@@ -173,11 +166,6 @@ const { locale } = useLanguage()
         The encrypted data exactly as it arrived, a random id and the time of expiry. The server
         cannot decrypt the data.
       </li>
-      <li>
-        For a request link also its limits (the number and size of waiting submissions) and a
-        SHA-256 hash of a value only the owner's browser can derive. The server receives neither the
-        public key nor the private key.
-      </li>
       <li>It is stored in a Redis compatible store (Valkey) that belongs to the service.</li>
     </ul>
 
@@ -193,12 +181,8 @@ const { locale } = useLanguage()
         hours applies when none is chosen. The service allows no more than 30 days.
       </li>
       <li>
-        A request link currently accepts submissions for seven days. A submission stays until the
-        owner opens it or the link expires.
-      </li>
-      <li>
-        An expired secret and an opened one cannot be told apart. The service keeps no record of
-        either.
+        An expired secret and an opened one cannot be told apart. Nothing records which secret was
+        opened: the log (see below) carries the route pattern, never the id.
       </li>
     </ul>
 
@@ -206,8 +190,9 @@ const { locale } = useLanguage()
     <p>
       For every request the server writes one log line: the method, the route pattern (not the path,
       so never the id of a link), the status code, the size of the answer, the duration and the
-      address the request came from. The server also uses that address to limit how many requests a
-      client may make.
+      address the request came from. Every line also carries the time and a random request id.
+      Opening a secret writes such a line too, without its id. The server also uses the address to
+      limit how many requests a client may make.
     </p>
 
     <h2 class="text-xl font-semibold text-text">Page view counting</h2>
@@ -243,9 +228,8 @@ const { locale } = useLanguage()
     <h2 class="text-xl font-semibold text-text">Cookies and browser storage</h2>
     <p>
       This site sets no cookie and loads no script from another site. Your browser may keep a
-      display choice (light or dark, language) in its local storage. It is not sent to the server. A
-      request link stores the owner's private key as a key that cannot be exported in this browser's
-      IndexedDB. There is no copy on the server.
+      display choice (light or dark, language) in its local storage. It is not sent to the server.
+      Beyond that, this site stores nothing in your browser's storage today.
     </p>
 
     <h2 class="text-xl font-semibold text-text">Your rights</h2>

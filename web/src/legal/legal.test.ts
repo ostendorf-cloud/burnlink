@@ -117,6 +117,12 @@ describe('prerender file list', () => {
     const sitemap = list.find((f) => f.path === 'sitemap.xml')?.content ?? ''
     expect(sitemap).not.toContain('terms')
     expect(sitemap).toContain(`${ORIGIN}/de/imprint`)
-    expect(list.find((f) => f.path === 'robots.txt')?.content).toContain(`${ORIGIN}/sitemap.xml`)
+    const robots = list.find((f) => f.path === 'robots.txt')?.content ?? ''
+    expect(robots).toContain(`Sitemap: ${ORIGIN}/sitemap.xml`)
+    for (const line of ['Disallow: /r/', 'Disallow: /s/', 'Disallow: /api/']) {
+      expect(robots.split('\n')).toContain(line)
+    }
+    expect(robots.split('\n')).not.toContain('Allow: /')
+    expect(robots.split('\n')).toContain('Allow: /en/privacy')
   })
 })

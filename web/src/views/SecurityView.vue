@@ -21,8 +21,9 @@ const iterations = PBKDF2_ITERATIONS.toLocaleString('en-US').replace(/,/g, ' ')
         <p>
           This page describes a design, and says so where a part of it is not running yet. The
           encryption of an ordinary secret exists in the repository as a library with tests. It is
-          not part of any page you can use yet. The store that keeps a secret for one read is not
-          connected to the running server, and the page that sends an ordinary secret is not built.
+          not part of any page you can use yet, and the page that sends an ordinary secret is not
+          built. The server side runs: the running server stores an encrypted secret in its store
+          and hands it out once through its API, but no page of this site calls that API yet.
         </p>
         <p>
           The request link is a link you publish so that someone can send you a secret back. Its
@@ -38,8 +39,10 @@ const iterations = PBKDF2_ITERATIONS.toLocaleString('en-US').replace(/,/g, ' ')
           <dt class="text-sm font-medium text-text">It stores</dt>
           <dd class="text-base text-text-muted">
             The encrypted payload exactly as it arrived, a random id from 16 random bytes, and an
-            expiry. A request link expires after 7 days and takes payloads up to 1 MiB, both
-            defaults that may change. The lifetime of an ordinary secret is not fixed yet.
+            expiry. The sender chooses the lifetime of an ordinary secret within bounds the operator
+            configures: by default 1 minute to 7 days, 24 hours when none is chosen, and never more
+            than 30 days. A request link, once the server serves it, is meant to expire after 7 days
+            and take payloads up to 1 MiB, both defaults that may change.
           </dd>
         </div>
         <div class="flex flex-col gap-1">
@@ -156,18 +159,17 @@ version │ flags │ salt (16, only with a passphrase) │ iv (12) │ cipherte
     <GovueCard as="section" title="One link, one read">
       <ul class="flex list-disc flex-col gap-2 pl-5 text-base text-text-muted">
         <li>
-          The design: revealing takes the payload and deletes it in the same step, one read, so if
-          two people open at the same moment, exactly one of them gets it. The store contract is
-          written for that, and the request link's open endpoint already uses it.
+          Revealing takes the payload and deletes it in the same store step, one read, so if two
+          people open at the same moment, exactly one of them gets it. The open endpoint of the
+          running server does this today.
         </li>
         <li>
-          Not running yet: the store behind the running server, and the endpoints that hand out an
-          ordinary secret. Until then no secret is kept for one read.
+          Not running yet: a page that sends or reveals an ordinary secret, and the request link,
+          whose endpoints the running server does not register.
         </li>
         <li>
-          Meant to be the same answer for an unknown, expired, already opened or malformed link.
-          Today the request link's open endpoint answers an unknown id, a wrong owner proof and an
-          expired link alike. Its other endpoints still tell a full or oversized submission apart.
+          The same answer for an unknown, expired, already opened or malformed link: the secret
+          endpoints of the running server give one fixed refusal for all of them.
         </li>
       </ul>
     </GovueCard>

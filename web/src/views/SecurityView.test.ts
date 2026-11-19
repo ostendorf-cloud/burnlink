@@ -49,7 +49,9 @@ describe('SecurityView', () => {
   it('says which parts are not running yet', () => {
     render(SecurityView)
 
-    expect(screen.getByTestId('status')).toHaveTextContent(/not connected to the running server/i)
+    expect(screen.getByTestId('status')).toHaveTextContent(
+      /no page of this site calls that API yet/i,
+    )
     expect(screen.getByTestId('status')).toHaveTextContent(/not part of any page you can use/i)
   })
 
