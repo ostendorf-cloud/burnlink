@@ -13,7 +13,9 @@ import {
 
 import CreateRequestLink from './views/CreateRequestLink.vue'
 import RequestLinkView from './views/RequestLinkView.vue'
+import RevealSecretView from './views/RevealSecretView.vue'
 import SecurityView from './views/SecurityView.vue'
+import ShareSecret from './views/ShareSecret.vue'
 
 // There is no router dependency here: a request link's own page is told
 // apart from the home page by the URL path alone, /r/<id>, and the security
@@ -21,6 +23,10 @@ import SecurityView from './views/SecurityView.vue'
 // was reached for.
 const requestLinkID = computed(() => {
   const match = /^\/r\/([^/]+)$/.exec(window.location.pathname)
+  return match ? decodeURIComponent(match[1]) : null
+})
+const secretID = computed(() => {
+  const match = /^\/s\/([^/]+)$/.exec(window.location.pathname)
   return match ? decodeURIComponent(match[1]) : null
 })
 const onSecurityPage = window.location.pathname === '/security'
@@ -45,14 +51,13 @@ const footerLinks = [{ href: '/security', label: 'How the encryption works' }]
 
   <SecurityView v-if="onSecurityPage" />
   <RequestLinkView v-else-if="requestLinkID" :id="requestLinkID" />
+  <RevealSecretView v-else-if="secretID" :id="secretID" />
   <GovuePage
     v-else
     title="burnlink"
     lead="One time secret sharing: the browser encrypts, the server hands it out exactly once."
   >
-    <p class="text-text-muted">
-      Sending a one-time secret through a link is not built into this page yet.
-    </p>
+    <ShareSecret />
     <CreateRequestLink />
   </GovuePage>
 

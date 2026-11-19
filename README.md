@@ -15,9 +15,10 @@ Redis-compatible, read with `GETDEL` so a reveal and a delete happen in one step
 `SET NX PX` so a second write can never overwrite an existing one; the deployment runs Valkey
 behind it.
 
-The server side is implemented: the store client and the five API endpoints in
-`docs/concepts/burnlink.md`. The page that encrypts, and the CLI and the notification, are still
-ahead. See `AGENTS.md`'s "Scope of this milestone" for what is built and what is not.
+The server side and the page are implemented: the store client, the five API endpoints in
+`docs/concepts/burnlink.md`, and the pages that share and reveal a secret. The CLI and the
+notification are still ahead. See `AGENTS.md`'s "Scope of this milestone" for what is built and
+what is not.
 
 ## Install
 

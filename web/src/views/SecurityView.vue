@@ -19,16 +19,16 @@ const iterations = PBKDF2_ITERATIONS.toLocaleString('en-US').replace(/,/g, ' ')
     <GovueCard as="section" title="What is running today">
       <div class="flex flex-col gap-3 text-base text-text-muted" data-testid="status">
         <p>
-          This page describes a design, and says so where a part of it is not running yet. The
-          encryption of an ordinary secret exists in the repository as a library with tests. It is
-          not part of any page you can use yet, and the page that sends an ordinary secret is not
-          built. The server side runs: the running server stores an encrypted secret in its store
-          and hands it out once through its API, but no page of this site calls that API yet.
+          This page describes a design, and says so where a part of it is not running yet. Sharing
+          and revealing an ordinary secret runs: the home page encrypts in your browser and stores
+          the result, and the link it makes opens a page that fetches the secret once and decrypts
+          it in your browser.
         </p>
         <p>
-          The request link is a link you publish so that someone can send you a secret back. Its
-          pages and its server endpoints are written, but the running server does not serve those
-          endpoints yet, so it cannot be used today.
+          Not running yet: the request link, a link you publish so that someone can send you a
+          secret back. Its pages and its server endpoints are written, but the running server does
+          not serve those endpoints yet, so it cannot be used today. A command line client and a
+          notification when a link was opened do not exist either.
         </p>
       </div>
     </GovueCard>
@@ -80,9 +80,7 @@ const iterations = PBKDF2_ITERATIONS.toLocaleString('en-US').replace(/,/g, ' ')
             >&lt;key&gt;</span
           >
         </p>
-        <p class="text-sm">
-          An example of the planned shape of a send link. This route does not exist yet.
-        </p>
+        <p class="text-sm">The shape of a link to a secret.</p>
 
         <ul class="flex list-disc flex-col gap-2 pl-5">
           <li>
@@ -160,12 +158,19 @@ version │ flags │ salt (16, only with a passphrase) │ iv (12) │ cipherte
       <ul class="flex list-disc flex-col gap-2 pl-5 text-base text-text-muted">
         <li>
           Revealing takes the payload and deletes it in the same store step, one read, so if two
-          people open at the same moment, exactly one of them gets it. The open endpoint of the
-          running server does this today.
+          people open at the same moment, exactly one of them gets it.
         </li>
         <li>
-          Not running yet: a page that sends or reveals an ordinary secret, and the request link,
-          whose endpoints the running server does not register.
+          The page behind a link asks you to press a button before it opens the secret. A chat
+          program or a preview service that only loads the page does not use the link up.
+        </li>
+        <li>
+          Once the secret is taken, the server no longer has it. A wrong passphrase can be tried
+          again only while the page stays open, because the encrypted secret is held in that page
+          until then. Close or reload it and the secret is gone for good.
+        </li>
+        <li>
+          Not running yet: the request link, whose endpoints the running server does not register.
         </li>
         <li>
           The same answer for an unknown, expired, already opened or malformed link: the secret
@@ -210,9 +215,11 @@ version │ flags │ salt (16, only with a passphrase) │ iv (12) │ cipherte
         <ul class="flex list-disc flex-col gap-2 pl-5">
           <li>
             Counted: a visit to a page, as the name of the page only, for example
-            <code class="font-mono text-text">/security</code> or
-            <code class="font-mono text-text">/r/&#123;id&#125;</code>. The second is one entry for
-            every link, not one per link.
+            <code class="font-mono text-text">/security</code>,
+            <code class="font-mono text-text">/s/&#123;id&#125;</code> or
+            <code class="font-mono text-text">/r/&#123;id&#125;</code>. The last two are one entry
+            for every link, not one per link. Loading the page behind a secret link is counted as a
+            page view. Opening the secret is a call to the API and is not.
           </li>
           <li>
             Also sent with it: the site's own host name, the first language your browser asks for,
@@ -249,6 +256,11 @@ version │ flags │ salt (16, only with a passphrase) │ iv (12) │ cipherte
         <li>
           Anyone who gets the link gets the secret. Encryption in the browser does not make a
           careless channel safe.
+        </li>
+        <li>
+          The sender's browser history and clipboard hold the whole link until they are cleared. The
+          link only works once, but it stays readable in the meantime. After a reveal, the page
+          removes the key from the address bar.
         </li>
         <li>
           This server cannot read a stored secret, but it serves the code that does the encrypting.

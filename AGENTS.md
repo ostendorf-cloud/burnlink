@@ -57,9 +57,14 @@ The global baseline already applies here and is not repeated below.
   no call site here.
 - `web/` is the Vue SPA, consuming govue's Vue package as a pnpm git dependency. There is still no
   router dependency: `App.vue` tells a request link's own page (`/r/<id>`, `RequestLinkView.vue`)
-  apart from the home page (`CreateRequestLink.vue`) by the URL path alone, and shows
-  `SecurityView.vue` on `/security`; `cmd/burnlink` answers exactly `/security` and `/r/<id>`
-  (one path segment) with `index.html`, every other unknown path, `/api/` included, with 404.
+  and a secret link's page (`/s/<id>`, `RevealSecretView.vue`) apart from the home page
+  (`ShareSecret.vue` and `CreateRequestLink.vue`) by the URL path alone, and shows
+  `SecurityView.vue` on `/security`; `cmd/burnlink` answers exactly `/security`, `/r/<id>` and
+  `/s/<id>` (one path segment) with `index.html`, every other unknown path, `/api/` included,
+  with 404. The share and reveal pages call `secrets-api.ts` (the five endpoints through govue's
+  client) and use `crypto.ts` unchanged; `secret-link.ts` builds and reads `/s/<id>#<key>`. The
+  reveal page opens the secret only on a click, never on load, so a link preview does not burn
+  it. The app pages stay English only; the legal pages carry German and English.
   Every view renders inside `GovuePage`, the `main#main` the skip link points to.
   `SecurityView.vue` explains the encryption and marks what is not running yet, so it changes in
   the same commit as the format or the store wiring. `web/src/lib/request-link-crypto.ts` is the request
@@ -101,9 +106,9 @@ task check
 
 The Go entry point, the embedded Vue build, health, readiness and metrics on govue's admin
 listener, the Helm chart, the container build, the store client and the five secret endpoints
-exist. Left out, tracked as later milestones:
+exist, and so does the page that encrypts in the browser, calls the endpoints and reveals a
+secret once. Left out, tracked as later milestones:
 
-- The page that encrypts in the browser and calls the endpoints.
 - A CLI client: sending a secret from a terminal with the same crypto the page uses.
 - A pickup notification: a sender optionally leaves a webhook or a mail address and learns when
   their link was redeemed, with the server learning nothing about the secret's content either way.

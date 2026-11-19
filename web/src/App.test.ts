@@ -47,7 +47,7 @@ describe('App', () => {
   })
 
   it('links the imprint and the privacy page from the footer of every app page', () => {
-    for (const path of ['/', '/security', '/r/abc']) {
+    for (const path of ['/', '/security', '/r/abc', '/s/abc']) {
       window.history.pushState({}, '', path)
       const { unmount } = render(App)
 
@@ -72,7 +72,7 @@ describe('App', () => {
     expect(screen.queryByRole('link', { name: 'Send a secret' })).not.toBeInTheDocument()
   })
 
-  it.each(['/', '/security', '/r/abc'])(
+  it.each(['/', '/security', '/r/abc', '/s/abc'])(
     'gives the skip link a target, one main landmark with id main, on %s',
     (path) => {
       window.history.pushState({}, '', path)
@@ -84,6 +84,20 @@ describe('App', () => {
       expect(container.querySelector('main#main')).not.toBeNull()
     },
   )
+
+  it('shows the share form on the home page', () => {
+    render(App)
+
+    expect(screen.getByRole('button', { name: 'Create link' })).toBeVisible()
+  })
+
+  it('shows the reveal view on /s/<id> and not the share form', async () => {
+    window.history.pushState({}, '', '/s/abc#')
+    render(App)
+
+    expect(screen.queryByRole('button', { name: 'Create link' })).not.toBeInTheDocument()
+    expect(await screen.findByText('This link could not be opened')).toBeVisible()
+  })
 
   it('renders the security page on /security and names the key fragment and the one time read', () => {
     window.history.pushState({}, '', '/security')

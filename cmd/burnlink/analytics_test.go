@@ -165,6 +165,32 @@ func TestAnalyticsCountsOnePatternForEveryRequestLinkID(t *testing.T) {
 	}
 }
 
+func TestAnalyticsCountsOnePatternForEverySecretLinkID(t *testing.T) {
+	c := newCounting(t, newUmamiStub(t, nil))
+
+	for _, path := range []string{"/s/idOneAAAAAAAA", "/s/idTwoBBBBBBBB?token=abc"} {
+		if rec := c.get(t, path); rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200", path, rec.Code)
+		}
+	}
+	got := c.flushed(t)
+	if len(got) != 2 {
+		t.Fatalf("stub received %d views, want 2", len(got))
+	}
+	for _, m := range got {
+		if p := payloadOf(t, m); p["url"] != "/s/{id}" {
+			t.Errorf("url = %v, want the route pattern /s/{id}", p["url"])
+		}
+	}
+	for _, b := range c.stub.received() {
+		for _, secret := range []string{"idOne", "idTwo", "token", "abc"} {
+			if strings.Contains(b, secret) {
+				t.Errorf("a reported view holds %q: %s", secret, b)
+			}
+		}
+	}
+}
+
 func TestAnalyticsCountsThePagesByPattern(t *testing.T) {
 	c := newCounting(t, newUmamiStub(t, nil))
 
@@ -203,6 +229,8 @@ func TestAnalyticsCountsNoAPIRouteAndNoAsset(t *testing.T) {
 		"/no-such-page",
 		"/r/a/b",
 		"/r/",
+		"/s/a/b",
+		"/s/",
 		"/healthz",
 		"/metrics",
 	} {

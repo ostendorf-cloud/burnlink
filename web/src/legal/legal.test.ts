@@ -45,6 +45,7 @@ describe('legal pages', () => {
 
       const text = container.textContent ?? ''
       expect(text).toContain('/r/{id}')
+      expect(text).toContain('/s/{id}')
       expect(text).toContain('/api')
       expect(text).toContain('48')
       expect(text).toContain('Umami')

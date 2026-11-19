@@ -204,7 +204,7 @@ func buildPublicHandler(logger *slog.Logger, cfg config.Config, vault secrets.Va
 	mux.Handle("/", files)
 	// The SPA tells its pages apart by their path alone, so the server
 	// answers exactly the paths App.vue knows with index.html instead of a
-	// 404: /security and /r/<id>. Everything else, /api/ included, stays
+	// 404: /security, /r/<id> and /s/<id>. Everything else, /api/ included, stays
 	// with the file server and answers 404 when no such file exists. A GET
 	// pattern also matches HEAD. {id} spans one non-empty path segment, the
 	// same shape App.vue's own /r/<id> match accepts, so /r/ and /r/a/b stay
@@ -218,6 +218,7 @@ func buildPublicHandler(logger *slog.Logger, cfg config.Config, vault secrets.Va
 	}
 	mux.HandleFunc("GET /security", index)
 	mux.HandleFunc("GET /r/{id}", index)
+	mux.HandleFunc("GET /s/{id}", index)
 	if err := mountLegal(mux, dist, cfg.SiteURL); err != nil {
 		return nil, err
 	}
