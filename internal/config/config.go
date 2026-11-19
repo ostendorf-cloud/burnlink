@@ -76,7 +76,7 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	cfg.LogLevel = level
 
-	trustedProxies, err := clientip.ParseCIDRs(resolved("TRUSTED_PROXY_CIDRS"))
+	trustedProxies, err := clientip.ParseCIDRs(resolved("TRUSTED_PROXIES"))
 	if err != nil {
 		problems = append(problems, err)
 	}

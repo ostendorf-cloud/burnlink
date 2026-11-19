@@ -14,7 +14,7 @@ services:
       STORE_ADDR: "valkey:6379"
       # Limits of a stored secret and the per client rate limit. These are the
       # application defaults, spelled out so a local run shows what to tune.
-      # Behind a reverse proxy also set TRUSTED_PROXY_CIDRS; see .env.example.
+      # Behind a reverse proxy also set TRUSTED_PROXIES; see .env.example.
       SECRET_MAX_BYTES: "1048576"
       SECRET_LIFETIME_MIN: "1m"
       SECRET_LIFETIME_MAX: "7d"

@@ -25,7 +25,7 @@ helm install burnlink charts/burnlink --set config.store.addr=valkey:6379
 | `existingSecret.name` | Existing Secret holding the store credentials | `""` |
 | `existingSecret.usernameKey` | Key of the store username in that Secret | `""` |
 | `existingSecret.passwordKey` | Key of the store password in that Secret | `""` |
-| `config.trustedProxyCidrs` | CIDRs whose `X-Forwarded-For` entry is trusted, wired into `TRUSTED_PROXY_CIDRS` | `""` |
+| `config.trustedProxies` | CIDRs whose `X-Forwarded-For` entry is trusted, wired into `TRUSTED_PROXIES` | `""` |
 | `config.secrets.maxBytes` | Largest ciphertext in bytes, wired into `SECRET_MAX_BYTES` | unset, application default `1048576` |
 | `config.secrets.lifetimeMin` | Shortest lifetime a sender may ask for, wired into `SECRET_LIFETIME_MIN` | unset, application default `1m` |
 | `config.secrets.lifetimeMax` | Longest lifetime, wired into `SECRET_LIFETIME_MAX` | unset, application default `7d` |
@@ -48,7 +48,7 @@ per replica.
 `ingress.enabled` and `httpRoute.enabled` are mutually exclusive: enabling both fails the
 render. Neither routes to the admin port; that stays cluster-internal.
 
-Rendering with `ingress.enabled` true and `config.trustedProxyCidrs` left empty also fails the
+Rendering with `ingress.enabled` true and `config.trustedProxies` left empty also fails the
 render: left unset behind this chart's own Ingress, the client address resolution that setting
 feeds collapses every sender onto the ingress controller's own pod address. Set it to the
 ingress controller's pod or Service CIDR.

@@ -47,7 +47,7 @@ public one.
 | `ADMIN_ADDR` | Address govue's admin listener listens on: `/healthz`, `/readyz` and `/metrics` | `:8081` | no |
 | `LOG_LEVEL` | `debug`, `info`, `warn` or `error` | `info` | no |
 | `STORE_ADDR` | Address of the Redis-compatible store, `host:port` | none | yes |
-| `TRUSTED_PROXY_CIDRS` | CIDRs, comma separated, whose `X-Forwarded-For` is trusted | empty, trust none | no |
+| `TRUSTED_PROXIES` | CIDRs, comma separated, whose `X-Forwarded-For` is trusted | empty, trust none | no |
 | `SECRET_MAX_BYTES` | Largest ciphertext accepted, decoded, in bytes (1 to 67108864) | `1048576` | no |
 | `SECRET_LIFETIME_MIN` | Shortest lifetime a sender may ask for, in whole seconds, for example `30s` or `7d` | `1m` | no |
 | `SECRET_LIFETIME_MAX` | Longest lifetime a sender may ask for (up to `30d`) | `7d` | no |

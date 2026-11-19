@@ -83,7 +83,7 @@
     "config": {
       "type": "object",
       "properties": {
-        "trustedProxyCidrs": { "type": "string" },
+        "trustedProxies": { "type": "string" },
         "siteHost": {
           "type": "string",
           "description": "Public host of the site, fed into SITE_HOST. Required when config.umami is set; enforced by a template fail guard.",
