@@ -30,9 +30,8 @@ type Config struct {
 	LogLevel  slog.Level
 
 	// TrustedProxies are the TCP peers whose X-Forwarded-For entry
-	// internal/webapp/requestlink's client address resolution trusts, fed
-	// into clientip.NewResolver once that handler is wired into this
-	// binary; see AGENTS.md's "Scope of this milestone". Empty means
+	// internal/webapp's client address resolution trusts, fed into
+	// clientip.NewResolver for the access log and the rate limit. Empty means
 	// every request is attributed to its TCP peer, the secure default
 	// behind no proxy at all, but the wrong one behind the chart's own
 	// Ingress, where every submitter would otherwise collapse onto the
@@ -41,6 +40,11 @@ type Config struct {
 
 	// Store is the Redis-compatible store's address and credentials.
 	Store Store
+
+	// Secrets are the size and lifetime limits of a stored secret.
+	Secrets Secrets
+	// RateLimit is the per client address budget of the secret endpoints.
+	RateLimit RateLimit
 }
 
 // Load reads every setting through envconf, so a misconfigured deployment
@@ -56,6 +60,7 @@ func Load(getenv func(string) string) (Config, error) {
 
 	var problems []error
 	cfg.Store, problems = loadStore(l, problems)
+	cfg.Secrets, cfg.RateLimit, problems = loadSecrets(l, problems)
 	level, err := logging.Level(l.String("LOG_LEVEL", "info"))
 	if err != nil {
 		problems = append(problems, err)

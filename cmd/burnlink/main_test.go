@@ -4,7 +4,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"log/slog"
@@ -16,13 +19,159 @@ import (
 	"testing"
 
 	"github.com/ostendorf-cloud/govue/health"
+	"github.com/ostendorf-cloud/govue/logging"
 
+	"github.com/ostendorf-cloud/burnlink/internal/config"
 	"github.com/ostendorf-cloud/burnlink/internal/store"
+	"github.com/ostendorf-cloud/burnlink/internal/store/memstore"
 	"github.com/ostendorf-cloud/burnlink/internal/store/redisstore"
 )
 
 func testLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
+}
+
+// testConfig is the configuration a deployment gets with only STORE_ADDR set.
+func testConfig(t *testing.T) config.Config {
+	t.Helper()
+	cfg, err := config.Load(func(key string) string {
+		if key == "STORE_ADDR" {
+			return "store.invalid:6379"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	return cfg
+}
+
+// memBackend is the in process store with the probe Secrets needs.
+type memBackend struct{ *memstore.Store }
+
+func (memBackend) Ping(context.Context) error { return nil }
+
+func testVault() *store.Secrets { return store.NewSecrets(memBackend{memstore.New()}) }
+
+// TestBuildHandlerAppliesTheConfiguration pins the wiring in buildHandler: the
+// configured burst, size limit and trusted proxy ranges reach the limiter, the
+// size check and the access log, not some default.
+func TestBuildHandlerAppliesTheConfiguration(t *testing.T) {
+	cfg, err := config.Load(func(key string) string {
+		return map[string]string{
+			"STORE_ADDR":          "store.invalid:6379",
+			"SECRET_MAX_BYTES":    "16",
+			"RATE_LIMIT_BURST":    "1",
+			"RATE_LIMIT_PER":      "1h",
+			"TRUSTED_PROXY_CIDRS": "10.0.0.0/8",
+		}[key]
+	})
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	var logs bytes.Buffer
+	handler, err := buildHandler(logging.New(&logs, slog.LevelInfo), cfg, testVault())
+	if err != nil {
+		t.Fatalf("buildHandler() error = %v", err)
+	}
+
+	// Every request arrives from the proxy, 10.1.2.3, and names its client.
+	post := func(client string, ciphertext []byte) int {
+		body := `{"ciphertext":"` + base64.StdEncoding.EncodeToString(ciphertext) + `"}`
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/secrets", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Forwarded-For", client)
+		req.RemoteAddr = "10.1.2.3:4000"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if got := post("198.51.100.1", bytes.Repeat([]byte{'x'}, 16)); got != http.StatusCreated {
+		t.Errorf("a ciphertext of exactly the configured limit = %d, want 201", got)
+	}
+	if got := post("198.51.100.1", []byte("x")); got != http.StatusTooManyRequests {
+		t.Errorf("the second request of one client = %d, want 429 from the configured burst of 1", got)
+	}
+	if got := post("198.51.100.2", []byte("x")); got != http.StatusCreated {
+		t.Errorf("another client behind the same proxy = %d, want 201: the trusted proxy resolver feeds the limiter", got)
+	}
+	if got := post("198.51.100.3", bytes.Repeat([]byte{'x'}, 17)); got != http.StatusRequestEntityTooLarge {
+		t.Errorf("one byte over the configured limit = %d, want 413", got)
+	}
+
+	if !strings.Contains(logs.String(), `"client":"198.51.100.1"`) {
+		t.Errorf("the access log does not carry the resolved client address:\n%s", logs.String())
+	}
+	if strings.Contains(logs.String(), `"client":"10.1.2.3"`) {
+		t.Errorf("the access log carries the proxy address as the client:\n%s", logs.String())
+	}
+}
+
+// TestPublicHandlerMarksAPIRedirectsNoStore proves the outer middleware is in
+// the chain: the mux's redirect of an unclean API path is no-store too.
+func TestPublicHandlerMarksAPIRedirectsNoStore(t *testing.T) {
+	handler, err := buildHandler(testLogger(), testConfig(t), testVault())
+	if err != nil {
+		t.Fatalf("buildHandler() error = %v", err)
+	}
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api//v1/config", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code < 300 || rec.Code > 399 {
+		t.Fatalf("status = %d, want a redirect", rec.Code)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store", got)
+	}
+}
+
+// TestPublicHandlerServesTheSecretAPI proves the five endpoints are routed in
+// the real handler, behind the security headers, and that the API answers
+// before the file server could.
+func TestPublicHandlerServesTheSecretAPI(t *testing.T) {
+	handler, err := buildHandler(testLogger(), testConfig(t), testVault())
+	if err != nil {
+		t.Fatalf("buildHandler() error = %v", err)
+	}
+
+	do := func(method, path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequestWithContext(t.Context(), method, path, strings.NewReader(body))
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	for _, path := range []string{"/api/v1/config", "/api/v1/version"} {
+		rec := do(http.MethodGet, path, "")
+		if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("GET %s = %d, Cache-Control %q", path, rec.Code, rec.Header().Get("Cache-Control"))
+		}
+		if rec.Header().Get("X-Content-Type-Options") == "" {
+			t.Errorf("GET %s lost the security headers", path)
+		}
+	}
+
+	created := do(http.MethodPost, "/api/v1/secrets", `{"ciphertext":"c2VjcmV0"}`)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("POST /api/v1/secrets = %d, body %s", created.Code, created.Body)
+	}
+	var out struct{ ID string }
+	if err := json.Unmarshal(created.Body.Bytes(), &out); err != nil || out.ID == "" {
+		t.Fatalf("created body %s: %v", created.Body, err)
+	}
+	if rec := do(http.MethodHead, "/api/v1/secrets/"+out.ID, ""); rec.Code != http.StatusOK {
+		t.Errorf("HEAD = %d, want 200", rec.Code)
+	}
+	if rec := do(http.MethodPost, "/api/v1/secrets/"+out.ID+"/open", "{}"); rec.Code != http.StatusOK {
+		t.Errorf("open = %d, want 200", rec.Code)
+	}
+	if rec := do(http.MethodPost, "/api/v1/secrets/"+out.ID+"/open", "{}"); rec.Code != http.StatusNotFound {
+		t.Errorf("second open = %d, want 404", rec.Code)
+	}
 }
 
 // TestEmbeddedDistBuildsAWorkingHandler proves the embedded dist filesystem is
@@ -35,7 +184,7 @@ func TestEmbeddedDistBuildsAWorkingHandler(t *testing.T) {
 		t.Fatalf("fs.Sub(distFS, \"dist\") error = %v", err)
 	}
 
-	if _, err := buildHandler(testLogger()); err != nil {
+	if _, err := buildHandler(testLogger(), testConfig(t), testVault()); err != nil {
 		t.Fatalf("buildHandler() error = %v", err)
 	}
 
@@ -48,7 +197,7 @@ func TestEmbeddedDistBuildsAWorkingHandler(t *testing.T) {
 // root path actually answers with the built SPA's index.html, not just that
 // the embedded filesystem contains one.
 func TestPublicHandlerServesIndexHTML(t *testing.T) {
-	handler, err := buildHandler(testLogger())
+	handler, err := buildHandler(testLogger(), testConfig(t), testVault())
 	if err != nil {
 		t.Fatalf("buildHandler() error = %v", err)
 	}
@@ -68,7 +217,7 @@ func TestPublicHandlerServesIndexHTML(t *testing.T) {
 // TestPublicHandlerServesIndexHTMLOnSecurityPath proves the security page's
 // path answers with the SPA instead of a 404.
 func TestPublicHandlerServesIndexHTMLOnSecurityPath(t *testing.T) {
-	handler, err := buildHandler(testLogger())
+	handler, err := buildHandler(testLogger(), testConfig(t), testVault())
 	if err != nil {
 		t.Fatalf("buildHandler() error = %v", err)
 	}
@@ -89,7 +238,7 @@ func TestPublicHandlerServesIndexHTMLOnSecurityPath(t *testing.T) {
 // not widen what the server answers: a trailing slash, an unknown path and
 // a non-GET method keep their previous status.
 func TestPublicHandlerSecurityPathStaysNarrow(t *testing.T) {
-	handler, err := buildHandler(testLogger())
+	handler, err := buildHandler(testLogger(), testConfig(t), testVault())
 	if err != nil {
 		t.Fatalf("buildHandler() error = %v", err)
 	}
@@ -122,7 +271,7 @@ func TestPublicHandlerSecurityPathStaysNarrow(t *testing.T) {
 // with index.html, with the security headers still applied, and that every
 // other path, the API's included, keeps answering 404.
 func TestPublicHandlerSPAFallback(t *testing.T) {
-	handler, err := buildHandler(testLogger())
+	handler, err := buildHandler(testLogger(), testConfig(t), testVault())
 	if err != nil {
 		t.Fatalf("buildHandler() error = %v", err)
 	}

@@ -50,11 +50,51 @@
   [0002](../adr/0002-the-payload-format-stays-from-old-burnlink.md) for the full layout.
 - Three endpoints carry a secret's lifecycle: store it, ask whether it is still there without
   taking it, open and delete it in one step. Config and version endpoints sit alongside them.
+  See "API surface" below.
 - The store contract is two primitives: `SET NX PX` so a write never overwrites an existing
   secret, `GETDEL` so a reveal and a delete happen atomically and two readers cannot both win.
-- Everything above runs today only as a scaffold: the wiring, the crypto and the store client
-  exist, and readiness reports the store; the three endpoints are the next milestone, not yet
-  built.
+  The check that asks without taking is a third, a plain `GET`. Valkey's `GET` does not touch the
+  key's TTL, so asking never extends a lifetime.
+- The wiring, the store client and the five endpoints exist, and readiness reports the store.
+  The page that calls them is the next milestone.
+
+### API surface
+
+| Method and path | Request | Answers |
+| --- | --- | --- |
+| `POST /api/v1/secrets` | JSON `{"ciphertext": <standard base64>, "lifetimeSeconds": <optional>}` | `201` with `{"id", "expiresAt"}`, `400`, `403`, `413`, `415`, `429` |
+| `HEAD /api/v1/secrets/{id}` | none | `200` with no body, or the one refusal |
+| `POST /api/v1/secrets/{id}/open` | JSON content type, body ignored | `200` with `{"ciphertext"}` and the secret is gone, or the one refusal |
+| `GET /api/v1/config` | none | `200` with `{"maxCiphertextBytes", "lifetime": {"minSeconds", "maxSeconds", "defaultSeconds"}}` |
+| `GET /api/v1/version` | none | `200` with `{"version", "commit", "goVersion"}` |
+
+- The id is 16 bytes from `crypto/rand`, 128 bits, as 22 characters of unpadded base64url. Only
+  the canonical encoding is valid.
+- The one refusal is `404` with a fixed body in govue's error shape and no request id, for an
+  unknown, expired, already opened or malformed id alike, and for every other method or path under
+  `/api/v1/secrets/`. On the `{id}` and `{id}/open` routes a malformed id is looked up under a
+  fixed dummy id, so the store round trip happens either way. The catch-all answers without a
+  store call and so in microseconds instead of milliseconds. That difference depends only on the
+  path shape the client chose, never on stored state. Other timing is not equalised.
+- `POST` requires the `application/json` content type, and a request the browser reports as
+  cross site is refused with `403`. Every answer carries `Cache-Control: no-store`, the mux's own
+  redirect of an unclean path under `/api/` included, through a middleware around the mux.
+- The size limit applies to the decoded ciphertext and is enforced while the body is read. The
+  JSON envelope gets 1 KiB of room on top of the base64 text, sized for compact JSON as
+  `JSON.stringify` writes it. A client that escapes `/` as `\/`, as PHP does by default, can see
+  a ciphertext near the limit refused with `413`. A lifetime outside the configured bounds is
+  refused with `400`, never clamped. Lifetime settings are whole seconds.
+- The JSON decoder is Go's own: field names match case insensitively, the last of two duplicate
+  keys wins, and the base64 decoder ignores `\n` and `\r` inside the string. A space is a `400`.
+- The rate limit is one budget per resolved client address across the three secret endpoints.
+  The address comes from `X-Forwarded-For` only through the configured trusted proxy ranges.
+
+Known limits:
+
+- govue's limiter keeps at most 100000 client addresses and evicts one arbitrary bucket when it
+  is full. An evicted client gets a fresh burst early.
+- The check reads the whole value through `GET` and drops it, so one `HEAD` transfers up to the
+  size limit from the store. The rate limit bounds that bandwidth.
 
 ### Request link
 

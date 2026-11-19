@@ -38,9 +38,12 @@ type Backend interface {
 
 // Secrets stores a ciphertext once and hands it out exactly once.
 //
-// It only speaks the two primitives the concept names: SET NX PX through
-// Store.SetNX, and GETDEL through Store.GetDel. A secret expires through
-// the store's own lifetime on the key; this service runs no sweeper.
+// It speaks the two primitives the concept names: SET NX PX through
+// Store.SetNX, and GETDEL through Store.GetDel. Exists adds a third, a plain
+// GET through Store.Get, for the non destructive check. GET neither deletes
+// nor touches the key's TTL in Valkey, so asking never extends a lifetime.
+// A secret expires through the store's own lifetime on the key; this
+// service runs no sweeper.
 //
 // Secrets never looks inside a value and never limits its size. Rejecting an
 // oversized ciphertext, validating an id and choosing the lifetime are the
@@ -101,6 +104,19 @@ func (s *Secrets) Take(ctx context.Context, id string) ([]byte, error) {
 		return nil, ErrNotFound
 	}
 	return value, nil
+}
+
+// Exists reports whether a secret is stored under id, without taking it. It
+// reads through Store.Get, the only non destructive read the contract has,
+// so it transfers the value from the store and drops it; the check is cheap
+// for a secret of the configured size limit and never consumes anything.
+// Like Take, it cannot tell expired, taken and unknown apart.
+func (s *Secrets) Exists(ctx context.Context, id string) (bool, error) {
+	_, ok, err := s.backend.Get(ctx, SecretKeyPrefix+id)
+	if err != nil {
+		return false, fmt.Errorf("store: exists: %w", err)
+	}
+	return ok, nil
 }
 
 // Ping reports whether the store is reachable, for the readiness probe. Its

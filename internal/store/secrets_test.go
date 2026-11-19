@@ -25,6 +25,7 @@ type fake struct {
 	*memstore.Store
 	failWith error
 	pingErr  error
+	getErr   error
 	setCalls int
 }
 
@@ -34,6 +35,13 @@ func (f *fake) SetNX(ctx context.Context, key string, value []byte, ttl time.Dur
 		return false, f.failWith
 	}
 	return f.Store.SetNX(ctx, key, value, ttl)
+}
+
+func (f *fake) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	if f.getErr != nil {
+		return nil, false, f.getErr
+	}
+	return f.Store.Get(ctx, key)
 }
 
 func (f *fake) GetDel(ctx context.Context, key string) ([]byte, bool, error) {
@@ -230,6 +238,44 @@ func TestTakeBackendFailureIsNotNotFound(t *testing.T) {
 	f, _ := newFake()
 	f.failWith = errBoom
 	_, err := store.NewSecrets(f).Take(t.Context(), "id")
+	wantBackendError(t, err)
+}
+
+func TestExists(t *testing.T) {
+	t.Parallel()
+
+	f, now := newFake()
+	s := store.NewSecrets(f)
+	ctx := t.Context()
+	mustNil(t, s.Put(ctx, "live", []byte("secret"), time.Minute))
+	mustNil(t, s.Put(ctx, "short", []byte("secret"), time.Second))
+
+	for range 3 {
+		ok, err := s.Exists(ctx, "live")
+		mustNil(t, err)
+		if !ok {
+			t.Fatal("Exists(live) = false, want true on every call")
+		}
+	}
+	// Asking never consumed it.
+	got, err := s.Take(ctx, "live")
+	mustNil(t, err)
+	if string(got) != "secret" {
+		t.Errorf("Take() after Exists = %q, want the secret", got)
+	}
+	if ok, _ := s.Exists(ctx, "live"); ok {
+		t.Error("Exists(live) after Take = true, want false")
+	}
+	if ok, _ := s.Exists(ctx, "unknown"); ok {
+		t.Error("Exists(unknown) = true, want false")
+	}
+	*now = now.Add(time.Minute)
+	if ok, _ := s.Exists(ctx, "short"); ok {
+		t.Error("Exists(expired) = true, want false")
+	}
+
+	f.getErr = errBoom
+	_, err = s.Exists(ctx, "live")
 	wantBackendError(t, err)
 }
 

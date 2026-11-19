@@ -23,12 +23,18 @@ The global baseline already applies here and is not repeated below.
 - `internal/store` defines `Store`, the small key/value contract (`SET NX PX`, a plain `Get`, and
   `GETDEL`) every handler that needs persistence is written against; `internal/store/memstore` is
   an in-process implementation for tests only, never wired into `cmd/burnlink`.
-  `store.Secrets` (`Put`, `Take`, `Ping`) is the one time secret API over a `store.Backend`, with
-  two sentinels: `ErrExists`, and `ErrNotFound` for expired, taken and never existed alike.
+  `store.Secrets` (`Put`, `Take`, `Exists`, `Ping`) is the one time secret API over a
+  `store.Backend`. `Exists` is a plain `GET`, which leaves the TTL alone. It has two sentinels:
+  `ErrExists`, and `ErrNotFound` for expired, taken and never existed alike.
   `internal/store/redisstore` is the production client (go-redis), wired into `cmd/burnlink`
   through readiness. Size limit, id validation and lifetime choice belong to the API layer.
   Its tests against a real server need `BURNLINK_TEST_REDIS_ADDR=host:port`, set from a service
   container in CI, and skip loudly without it.
+- `internal/webapp/secrets` serves the five endpoints of a one time secret link under
+  `/api/v1` (store, check, open, config, version), written against `store.Secrets`. Every link it
+  will not serve gets one fixed 404, see "API surface" in `docs/concepts/burnlink.md`. It uses
+  govue's `ratelimit`, `clientip`, `csrf` and `api`, and `internal/buildinfo` for the version.
+  `internal/config` also loads `SECRET_*` and `RATE_LIMIT_*`, none of them secret shaped.
 - `internal/webapp/requestlink` answers the request link's own endpoints: create a link, submit a
   sealed payload to it, and open everything waiting for the owner. Written against
   `internal/store.Store`, not against `memstore` directly, so swapping in the real client changes
@@ -77,12 +83,11 @@ task check
 
 ## Scope of this milestone
 
-This repository is a scaffold: the Go entry point, the embedded Vue build, health, readiness and
-metrics on govue's admin listener, the Helm chart and the container build. Nothing about one time
-secret sharing itself is implemented yet. Left out, tracked as later milestones:
+The Go entry point, the embedded Vue build, health, readiness and metrics on govue's admin
+listener, the Helm chart, the container build, the store client and the five secret endpoints
+exist. Left out, tracked as later milestones:
 
-- The API routes that make burnlink actually store and hand out a secret: the three endpoints a
-  link needs, built on `store.Secrets`. The store client and its configuration exist.
+- The page that encrypts in the browser and calls the endpoints.
 - A CLI client: sending a secret from a terminal with the same crypto the page uses.
 - A pickup notification: a sender optionally leaves a webhook or a mail address and learns when
   their link was redeemed, with the server learning nothing about the secret's content either way.
