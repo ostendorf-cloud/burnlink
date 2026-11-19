@@ -31,6 +31,9 @@ const passphrase = ref('')
 const passphraseError = ref('')
 const content = ref<Content | null>(null)
 const downloadUrl = ref('')
+// True while a passphrase is being tried: PBKDF2 takes a moment and a second
+// click must not start a second decrypt.
+const busy = ref(false)
 
 let linkKey: Bytes | null = null
 // The payload is held in memory only while a passphrase is still needed: the
@@ -43,7 +46,40 @@ function fail(title: string, message: string) {
   mode.value = 'error'
 }
 
+// Drops every trace of the secret from this page: the key and the payload
+// buffers are zeroed like crypto.ts zeroes its own, the shown content and the
+// download URL are released. Runs on unmount and when the page is hidden, so
+// a page restored from the back/forward cache cannot show the secret again.
+let disposed = false
+function wipe() {
+  disposed = true
+  if (linkKey) linkKey.fill(0)
+  linkKey = null
+  if (payload) payload.fill(0)
+  payload = null
+  if (content.value?.type === 'file') content.value.data.fill(0)
+  content.value = null
+  passphrase.value = ''
+  if (downloadUrl.value) URL.revokeObjectURL(downloadUrl.value)
+  downloadUrl.value = ''
+}
+
+function onPageHide() {
+  wipe()
+  fail(
+    'This page was left',
+    'The secret is no longer held here. Open the link again if it was not opened yet. A secret that was already revealed cannot be shown again.',
+  )
+}
+
+function onPageShow(event: PageTransitionEvent) {
+  // A restored page is never trusted with what it held before.
+  if (event.persisted) onPageHide()
+}
+
 onMounted(() => {
+  window.addEventListener('pagehide', onPageHide)
+  window.addEventListener('pageshow', onPageShow)
   try {
     linkKey = linkKeyFromFragment(window.location.hash.slice(1))
   } catch (err) {
@@ -55,7 +91,9 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  if (downloadUrl.value) URL.revokeObjectURL(downloadUrl.value)
+  window.removeEventListener('pagehide', onPageHide)
+  window.removeEventListener('pageshow', onPageShow)
+  wipe()
 })
 
 async function reveal() {
@@ -78,6 +116,10 @@ async function reveal() {
     }
     return
   }
+  if (disposed) {
+    fetched.fill(0)
+    return
+  }
   payload = fetched
   await decrypt('')
 }
@@ -86,19 +128,23 @@ async function decrypt(pass: string) {
   if (!linkKey || !payload) return
   try {
     const result = await decryptSecret(payload, linkKey, pass)
+    if (disposed) return
     show(result)
   } catch (err) {
+    if (disposed) return
     if (err instanceof DecryptError && err.code === 'passphrase_required') {
       mode.value = 'passphrase'
       return
     }
     if (err instanceof DecryptError && err.code === 'failed' && pass !== '') {
-      // Could be a wrong passphrase: the payload is still in memory, so it
-      // can be tried again without the server.
-      passphraseError.value = 'This passphrase does not open the secret. Try again.'
+      // A wrong passphrase, or a damaged key that is still well formed: the
+      // two cannot be told apart. The payload is still in memory, so it can
+      // be tried again without the server.
+      passphraseError.value = 'The passphrase or the link is wrong.'
       mode.value = 'passphrase'
       return
     }
+    if (payload) payload.fill(0)
     payload = null
     fail(
       'The secret could not be decrypted',
@@ -110,20 +156,29 @@ async function decrypt(pass: string) {
 }
 
 async function submitPassphrase() {
+  if (busy.value) return
   if (passphrase.value === '') {
     passphraseError.value = 'Enter the passphrase first.'
     return
   }
   passphraseError.value = ''
-  await decrypt(passphrase.value)
+  busy.value = true
+  try {
+    await decrypt(passphrase.value)
+  } finally {
+    busy.value = false
+  }
 }
 
 // The key is of no use once the secret is shown, and the link is spent:
 // the address bar and the history entry stop carrying it.
 function show(result: Content) {
+  if (payload) payload.fill(0)
   payload = null
+  if (linkKey) linkKey.fill(0)
   linkKey = null
   passphrase.value = ''
+  if (downloadUrl.value) URL.revokeObjectURL(downloadUrl.value)
   content.value = result
   if (result.type === 'file') {
     // Never rendered by the browser: a download with a neutral type.
@@ -138,11 +193,17 @@ function show(result: Content) {
   mode.value = 'revealed'
 }
 
-// A name from the sender is data: it only labels a download, and path
-// separators and control characters are dropped.
+// A name from the sender is data: it only labels a download. Path separators
+// and control characters become underscores, bidirectional controls (which
+// can reorder the shown name) are dropped, and the length is capped.
+const MAX_NAME = 120
 function safeName(name: string): string {
-  const cleaned = name.replace(/[\\/\u0000-\u001f\u007f]/g, '_').trim()
-  return cleaned === '' || cleaned === '.' || cleaned === '..' ? 'secret' : cleaned
+  const cleaned = name
+    .replace(/[\\/\u0000-\u001f\u007f]/g, '_')
+    .replace(/[‪-‮⁦-⁩]/g, '')
+    .trim()
+  const capped = [...cleaned].slice(0, MAX_NAME).join('')
+  return capped === '' || capped === '.' || capped === '..' ? 'secret' : capped
 }
 </script>
 
@@ -168,7 +229,7 @@ function safeName(name: string): string {
       <GovueField label="Passphrase" :error="passphraseError">
         <GovueInput v-model="passphrase" type="password" autocomplete="off" />
       </GovueField>
-      <GovueButton variant="primary" @click="submitPassphrase">Open</GovueButton>
+      <GovueButton variant="primary" :loading="busy" @click="submitPassphrase">Open</GovueButton>
     </GovueCard>
 
     <GovueCard v-else title="Your secret">

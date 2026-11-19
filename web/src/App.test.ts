@@ -99,6 +99,18 @@ describe('App', () => {
     expect(await screen.findByText('This link could not be opened')).toBeVisible()
   })
 
+  it.each(['/s/%C3%28', '/r/%C3%28'])(
+    'shows the not found page, not a blank page, on the invalid escape %s',
+    (path) => {
+      window.history.pushState({}, '', path)
+      render(App)
+
+      expect(screen.getByText('This page does not exist')).toBeVisible()
+      expect(screen.getAllByRole('main')).toHaveLength(1)
+      expect(screen.queryByRole('button', { name: 'Reveal the secret' })).not.toBeInTheDocument()
+    },
+  )
+
   it('renders the security page on /security and names the key fragment and the one time read', () => {
     window.history.pushState({}, '', '/security')
     render(App)

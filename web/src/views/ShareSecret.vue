@@ -22,6 +22,7 @@ import { getConfig, storeSecret, type SecretConfig } from '../lib/secrets-api'
 const config = ref<SecretConfig | null>(null)
 const text = ref('')
 const file = ref<File | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
 const passphrase = ref('')
 const lifetime = ref('')
 const sending = ref(false)
@@ -72,6 +73,10 @@ function onFileChange(event: Event) {
   file.value = input.files?.[0] ?? null
 }
 
+function tooLarge(limit: number): string {
+  return `This secret is too large: the limit is ${limit} bytes after encryption.`
+}
+
 function messageFor(err: unknown): string {
   if (isApiError(err)) {
     if (err.status === 413) return 'This secret is too large to send.'
@@ -86,6 +91,11 @@ async function send() {
   copied.value = false
   if (!file.value && text.value === '') {
     errorMessage.value = 'Enter a secret text or attach a file first.'
+    return
+  }
+  // The ciphertext is never smaller than the file: refuse before reading it.
+  if (file.value && config.value && file.value.size > config.value.maxCiphertextBytes) {
+    errorMessage.value = tooLarge(config.value.maxCiphertextBytes)
     return
   }
   sending.value = true
@@ -103,7 +113,7 @@ async function send() {
     const linkKey = generateLinkKey()
     const payload = await encryptSecret(content, linkKey, passphrase.value)
     if (config.value && payload.length > config.value.maxCiphertextBytes) {
-      errorMessage.value = `This secret is too large: the limit is ${config.value.maxCiphertextBytes} bytes after encryption.`
+      errorMessage.value = tooLarge(config.value.maxCiphertextBytes)
       return
     }
     const seconds = lifetime.value ? Number(lifetime.value) : undefined
@@ -113,9 +123,12 @@ async function send() {
       expiresAt: stored.expiresAt,
       protectedByPassphrase: passphrase.value.length > 0,
     }
-    // Nothing of the secret stays in the form once the link exists.
+    // Nothing of the secret stays in the form once the link exists. The file
+    // input is reset too, or it would keep the file and its name, and
+    // picking the same file again would fire no change event.
     text.value = ''
     file.value = null
+    if (fileInput.value) fileInput.value.value = ''
     passphrase.value = ''
   } catch (err) {
     errorMessage.value = messageFor(err)
@@ -145,23 +158,38 @@ async function copy() {
 
     <GovueErrorState v-if="errorMessage" title="Could not share" :message="errorMessage" />
 
-    <GovueField label="Secret text">
-      <GovueTextarea v-model="text" :disabled="Boolean(file)" placeholder="Type the secret here" />
-    </GovueField>
-    <GovueField label="Or attach a file instead">
-      <input type="file" @change="onFileChange" />
-    </GovueField>
-    <GovueField
-      label="Passphrase (optional)"
-      hint="A second factor. Send it through a different channel than the link."
-    >
-      <GovueInput v-model="passphrase" type="password" autocomplete="new-password" />
-    </GovueField>
-    <GovueField v-if="lifetimeOptions.length > 0" label="Expires after">
-      <GovueSelect v-model="lifetime" :options="lifetimeOptions" />
-    </GovueField>
+    <form class="flex flex-col gap-4" @submit.prevent="send">
+      <GovueField label="Secret text">
+        <GovueTextarea
+          v-model="text"
+          :disabled="Boolean(file)"
+          placeholder="Type the secret here"
+        />
+      </GovueField>
+      <GovueField label="Or attach a file instead">
+        <!-- A native control: it takes the id the field's label points at. -->
+        <template #default="{ id, describedBy }">
+          <input
+            :id="id"
+            ref="fileInput"
+            type="file"
+            :aria-describedby="describedBy"
+            @change="onFileChange"
+          />
+        </template>
+      </GovueField>
+      <GovueField
+        label="Passphrase (optional)"
+        hint="A second factor. Send it through a different channel than the link. Choose a strong one: anyone holding the link can try guesses offline."
+      >
+        <GovueInput v-model="passphrase" type="password" autocomplete="off" />
+      </GovueField>
+      <GovueField v-if="lifetimeOptions.length > 0" label="Expires after">
+        <GovueSelect v-model="lifetime" :options="lifetimeOptions" />
+      </GovueField>
 
-    <GovueButton variant="primary" :loading="sending" @click="send">Create link</GovueButton>
+      <GovueButton variant="primary" type="submit" :loading="sending">Create link</GovueButton>
+    </form>
 
     <div v-if="link" class="flex flex-col gap-2" data-testid="secret-link">
       <p class="text-text">

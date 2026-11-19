@@ -97,4 +97,14 @@ describe('SecurityView', () => {
     expect(screen.getByText(/anyone who gets the link gets the secret/i)).toBeVisible()
     expect(screen.getByText(/could serve different code/i)).toBeVisible()
   })
+
+  it("names the recipient's history, not the sender's, and that replaceState keeps the entry", () => {
+    render(SecurityView)
+
+    const item = screen.getByText(/recipient's browser records the whole link/i)
+    expect(item).toBeVisible()
+    expect(item.textContent).toMatch(/does not remove that history entry/)
+    expect(item.textContent).toMatch(/never revealed can\s+still be opened/)
+    expect(screen.queryByText(/sender's browser history/i)).not.toBeInTheDocument()
+  })
 })

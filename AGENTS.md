@@ -64,7 +64,10 @@ The global baseline already applies here and is not repeated below.
   with 404. The share and reveal pages call `secrets-api.ts` (the five endpoints through govue's
   client) and use `crypto.ts` unchanged; `secret-link.ts` builds and reads `/s/<id>#<key>`. The
   reveal page opens the secret only on a click, never on load, so a link preview does not burn
-  it. The app pages stay English only; the legal pages carry German and English.
+  it. `/s/<id>` is served with `Cache-Control: no-store` and `X-Robots-Tag: noindex`, and the
+  reveal page wipes the key, the payload and the plaintext on unmount and on `pagehide` and
+  `pageshow` (persisted), so a page from the back/forward cache never shows a secret again.
+  The app pages stay English only; the legal pages carry German and English.
   Every view renders inside `GovuePage`, the `main#main` the skip link points to.
   `SecurityView.vue` explains the encryption and marks what is not running yet, so it changes in
   the same commit as the format or the store wiring. `web/src/lib/request-link-crypto.ts` is the request

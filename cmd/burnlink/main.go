@@ -218,7 +218,15 @@ func buildPublicHandler(logger *slog.Logger, cfg config.Config, vault secrets.Va
 	}
 	mux.HandleFunc("GET /security", index)
 	mux.HandleFunc("GET /r/{id}", index)
-	mux.HandleFunc("GET /s/{id}", index)
+	// A secret link's page is never stored or indexed: no-store keeps it out of
+	// the back/forward cache and the HTTP cache, so a Back navigation loads it
+	// again instead of restoring a page that showed a secret, and noindex
+	// keeps a crawler that found the address from listing it.
+	mux.HandleFunc("GET /s/{id}", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Robots-Tag", "noindex")
+		index(w, r)
+	})
 	if err := mountLegal(mux, dist, cfg.SiteURL); err != nil {
 		return nil, err
 	}

@@ -63,6 +63,12 @@
   not burn the link. It decrypts in the browser and strips the key from the address bar. The
   server has already deleted the secret by then, so a passphrase is asked for after the fetch and
   the payload is kept in the page's memory for retries. Closing the page loses the secret.
+  The recipient's browser history still records `/s/<id>#<key>` when the page loads, and
+  `replaceState` does not remove that entry: an unrevealed link there can be opened by someone
+  with local access. The page is served `no-store` and `noindex`, and it wipes the key, the
+  payload and the plaintext when it is hidden or unmounted. An offline brute force of a weak
+  passphrase by someone holding the link is a property of the design; the page tells senders to
+  choose a strong one. Argon2id instead of PBKDF2 would be a format change.
 
 ### API surface
 

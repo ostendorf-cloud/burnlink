@@ -4,6 +4,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import {
+  GovueErrorState,
   GovueFooter,
   GovueHeader,
   GovueNav,
@@ -21,14 +22,22 @@ import ShareSecret from './views/ShareSecret.vue'
 // apart from the home page by the URL path alone, /r/<id>, and the security
 // page is /security. See AGENTS.md's "web/" entry for why nothing heavier
 // was reached for.
-const requestLinkID = computed(() => {
-  const match = /^\/r\/([^/]+)$/.exec(window.location.pathname)
-  return match ? decodeURIComponent(match[1]) : null
-})
-const secretID = computed(() => {
-  const match = /^\/s\/([^/]+)$/.exec(window.location.pathname)
-  return match ? decodeURIComponent(match[1]) : null
-})
+// An id that is not valid percent encoding, such as /s/%C3%28, is no page of
+// the site: the match fails and the home page's not found state shows.
+function idFromPath(prefix: string): string | null {
+  const match = new RegExp(`^/${prefix}/([^/]+)$`).exec(window.location.pathname)
+  if (!match) return null
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    return null
+  }
+}
+const requestLinkID = computed(() => idFromPath('r'))
+const secretID = computed(() => idFromPath('s'))
+const notFound = computed(
+  () => /^\/[rs]\/[^/]+$/.test(window.location.pathname) && !requestLinkID.value && !secretID.value,
+)
 const onSecurityPage = window.location.pathname === '/security'
 
 // The header names no wordmark on purpose: the project has no visual
@@ -50,6 +59,12 @@ const footerLinks = [{ href: '/security', label: 'How the encryption works' }]
   </GovueHeader>
 
   <SecurityView v-if="onSecurityPage" />
+  <GovuePage v-else-if="notFound">
+    <GovueErrorState
+      title="This page does not exist"
+      message="The address is not valid. Check that the link was copied completely."
+    />
+  </GovuePage>
   <RequestLinkView v-else-if="requestLinkID" :id="requestLinkID" />
   <RevealSecretView v-else-if="secretID" :id="secretID" />
   <GovuePage

@@ -4,12 +4,13 @@
 // The share and the reveal view together over an in-memory stand in for the
 // server: real crypto, real components, only the network call replaced.
 
-import { render, screen, waitFor } from '@testing-library/vue'
+import { cleanup, render, screen, waitFor } from '@testing-library/vue'
 import userEvent from '@testing-library/user-event'
 import { ApiError } from '@ostendorf-cloud/govue'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { encodeBase64, type Bytes } from '../lib/crypto'
+import { decryptSecret, encodeBase64, type Bytes, type Content } from '../lib/crypto'
+import type * as CryptoModule from '../lib/crypto'
 import RevealSecretView from './RevealSecretView.vue'
 import ShareSecret from './ShareSecret.vue'
 
@@ -19,7 +20,36 @@ vi.mock('../lib/secrets-api', () => ({
   openSecret: vi.fn(),
 }))
 
+// The real decryption, wrapped in a spy: the tests read the buffers the view
+// handed to it to see whether the view zeroed them afterwards.
+vi.mock('../lib/crypto', async (importOriginal) => {
+  const actual = await importOriginal<typeof CryptoModule>()
+  return { ...actual, decryptSecret: vi.fn(actual.decryptSecret) }
+})
+
 import { getConfig, openSecret, storeSecret } from '../lib/secrets-api'
+
+const isZero = (b: Bytes) => b.every((x) => x === 0)
+
+// What the view passed to the last decryptSecret call: the payload and the key.
+function lastDecryptArgs(): { payload: Bytes; key: Bytes } {
+  const calls = vi.mocked(decryptSecret).mock.calls
+  const [payload, key] = calls[calls.length - 1]
+  return { payload, key }
+}
+
+// jsdom has no object URLs. The spies are removed again after each test.
+function stubObjectURLs() {
+  const createObjectURL = vi.fn().mockReturnValue('blob:test')
+  const revokeObjectURL = vi.fn()
+  Object.assign(URL, { createObjectURL, revokeObjectURL })
+  return { createObjectURL, revokeObjectURL }
+}
+
+afterEach(() => {
+  Reflect.deleteProperty(URL, 'createObjectURL')
+  Reflect.deleteProperty(URL, 'revokeObjectURL')
+})
 
 // What the server would hold, and every request body it was sent.
 let server: Map<string, Bytes>
@@ -35,6 +65,7 @@ beforeEach(() => {
   received = []
   opens = 0
   window.history.pushState({}, '', '/')
+  vi.mocked(decryptSecret).mockClear()
   vi.mocked(getConfig).mockReset().mockRejectedValue(new Error('no config in this test'))
   vi.mocked(storeSecret)
     .mockReset()
@@ -62,6 +93,15 @@ async function share(text: string, passphrase = ''): Promise<string> {
   await userEvent.click(screen.getByRole('button', { name: 'Create link' }))
   const input = await screen.findByLabelText('Secret link')
   const url = (input as HTMLInputElement).value
+  unmount()
+  return url
+}
+
+async function shareFile(file: File): Promise<string> {
+  const { unmount } = render(ShareSecret)
+  await userEvent.upload(screen.getByLabelText('Or attach a file instead'), file)
+  await userEvent.click(screen.getByRole('button', { name: 'Create link' }))
+  const url = (await screen.findByLabelText<HTMLInputElement>('Secret link')).value
   unmount()
   return url
 }
@@ -150,9 +190,7 @@ describe('share and reveal', () => {
     const field = await screen.findByLabelText('Passphrase')
     await userEvent.type(field, 'wrong')
     await userEvent.click(screen.getByRole('button', { name: 'Open' }))
-    expect(
-      await screen.findByText('This passphrase does not open the secret. Try again.'),
-    ).toBeVisible()
+    expect(await screen.findByText('The passphrase or the link is wrong.')).toBeVisible()
     expect(screen.queryByTestId('revealed-text')).not.toBeInTheDocument()
 
     await userEvent.clear(field)
@@ -175,15 +213,9 @@ describe('share and reveal', () => {
   })
 
   it('round trips a file as a neutral download, never rendered', async () => {
-    const createObjectURL = vi.fn().mockReturnValue('blob:test')
-    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }))
-
-    const { unmount } = render(ShareSecret)
+    const { createObjectURL } = stubObjectURLs()
     const file = new File([new Uint8Array([1, 2, 3])], '../evil/<b>name.txt', { type: 'text/html' })
-    await userEvent.upload(document.querySelector('input[type=file]') as HTMLInputElement, file)
-    await userEvent.click(screen.getByRole('button', { name: 'Create link' }))
-    const url = (await screen.findByLabelText<HTMLInputElement>('Secret link')).value
-    unmount()
+    const url = await shareFile(file)
 
     openLink(url)
     await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
@@ -192,7 +224,136 @@ describe('share and reveal', () => {
     expect(link.getAttribute('download')).not.toMatch(/[\\/]/)
     const blob = createObjectURL.mock.calls[0][0] as Blob
     expect(blob.type).toBe('application/octet-stream')
-    vi.unstubAllGlobals()
+  })
+
+  it('strips bidirectional controls from a file name and caps its length', async () => {
+    stubObjectURLs()
+    const bidi = '‪‫‬‭‮⁦⁧⁨⁩'
+    const url = await shareFile(new File([new Uint8Array([1])], `evil${bidi}txt.exe`))
+    openLink(url)
+    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    expect(await screen.findByTestId('revealed-file')).toHaveAttribute('download', 'eviltxt.exe')
+    cleanup()
+
+    window.history.pushState({}, '', '/')
+    const long = 'a'.repeat(300) + '.txt'
+    const url2 = await shareFile(new File([new Uint8Array([1])], long))
+    openLink(url2)
+    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    const name = (await screen.findByTestId('revealed-file')).getAttribute('download') ?? ''
+    expect(name).toHaveLength(120)
+    expect(name).toBe('a'.repeat(120))
+  })
+
+  it('drops the key and the payload once the secret is shown', async () => {
+    const url = await share('wipe me')
+    openLink(url)
+    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    expect(await screen.findByTestId('revealed-text')).toHaveTextContent('wipe me')
+
+    const { payload, key } = lastDecryptArgs()
+    expect(key).toHaveLength(32)
+    expect(isZero(key)).toBe(true)
+    expect(isZero(payload)).toBe(true)
+  })
+
+  it('drops the secret when the view is unmounted', async () => {
+    const { revokeObjectURL } = stubObjectURLs()
+    const url = await shareFile(new File([new Uint8Array([7, 7, 7])], 'a.bin'))
+    const view = openLink(url)
+    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await screen.findByTestId('revealed-file')
+    const content = (await vi.mocked(decryptSecret).mock.results[0].value) as Content
+    if (content.type !== 'file') throw new Error('expected a file')
+    expect(isZero(content.data)).toBe(false)
+
+    view.unmount()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:test')
+    expect(isZero(content.data)).toBe(true)
+  })
+
+  it('drops the secret on pagehide, also for a page that goes into the bfcache', async () => {
+    const { revokeObjectURL } = stubObjectURLs()
+    const url = await shareFile(new File([new Uint8Array([7, 7, 7])], 'a.bin'))
+    openLink(url)
+    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await screen.findByTestId('revealed-file')
+    const content = (await vi.mocked(decryptSecret).mock.results[0].value) as Content
+    if (content.type !== 'file') throw new Error('expected a file')
+
+    window.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: true }))
+
+    expect(await screen.findByText('This page was left')).toBeVisible()
+    expect(screen.queryByTestId('revealed-file')).not.toBeInTheDocument()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:test')
+    expect(isZero(content.data)).toBe(true)
+  })
+
+  it('drops the text on pagehide and the buffers held for a passphrase retry', async () => {
+    const url = await share('hidden text', 'pw')
+    openLink(url)
+    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await screen.findByLabelText('Passphrase')
+    const { payload, key } = lastDecryptArgs()
+    expect(isZero(key)).toBe(false)
+    expect(isZero(payload)).toBe(false)
+
+    window.dispatchEvent(new Event('pagehide'))
+
+    expect(await screen.findByText('This page was left')).toBeVisible()
+    expect(isZero(key)).toBe(true)
+    expect(isZero(payload)).toBe(true)
+    expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+  })
+
+  it('removes a shown text from the page on pagehide', async () => {
+    const url = await share('shown text')
+    openLink(url)
+    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    expect(await screen.findByTestId('revealed-text')).toBeVisible()
+
+    window.dispatchEvent(new Event('pagehide'))
+
+    expect(await screen.findByText('This page was left')).toBeVisible()
+    expect(document.body.textContent).not.toContain('shown text')
+  })
+
+  it('wipes a page restored from the bfcache and ignores a normal pageshow', async () => {
+    const url = await share('restored')
+    openLink(url)
+    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    expect(await screen.findByTestId('revealed-text')).toBeVisible()
+
+    window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: false }))
+    expect(screen.getByTestId('revealed-text')).toBeVisible()
+    window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }))
+    expect(await screen.findByText('This page was left')).toBeVisible()
+    expect(screen.queryByTestId('revealed-text')).not.toBeInTheDocument()
+  })
+
+  it('says the passphrase or the link is wrong for a damaged key too', async () => {
+    const url = await share('guarded', 'open sesame')
+    const u = new URL(url)
+    openLink(u.origin + u.pathname + '#' + 'A'.repeat(43))
+    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+
+    await userEvent.type(await screen.findByLabelText('Passphrase'), 'open sesame')
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }))
+    expect(await screen.findByText('The passphrase or the link is wrong.')).toBeVisible()
+    expect(screen.queryByTestId('revealed-text')).not.toBeInTheDocument()
+  })
+
+  it('ignores a key in the query string', async () => {
+    const url = await share('only the fragment counts')
+    const u = new URL(url)
+    const key = u.hash.slice(1)
+    window.history.pushState({}, '', u.pathname + '?key=' + key + '&k=' + key)
+    render(RevealSecretView, { props: { id: u.pathname.split('/')[2] } })
+
+    expect(await screen.findByText('This link could not be opened')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Reveal the secret' })).not.toBeInTheDocument()
+    expect(opens).toBe(0)
+    expect(server.size).toBe(1)
   })
 
   it('clears the form once the link exists and renders text as text', async () => {
@@ -220,6 +381,71 @@ describe('share and reveal', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create link' }))
     await screen.findByLabelText('Secret link')
     expect(received[0].endsWith(' 86400')).toBe(true)
+  })
+
+  it('offers only lifetimes within the server limits and sends a non default choice', async () => {
+    vi.mocked(getConfig).mockResolvedValue({
+      maxCiphertextBytes: 4096,
+      lifetime: { minSeconds: 3600, maxSeconds: 604800, defaultSeconds: 86400 },
+    })
+    // Reka's select needs these pointer APIs, which jsdom lacks.
+    Object.assign(HTMLElement.prototype, {
+      hasPointerCapture: () => false,
+      setPointerCapture: () => undefined,
+      releasePointerCapture: () => undefined,
+      scrollIntoView: () => undefined,
+    })
+    render(ShareSecret)
+    const select = await screen.findByRole('combobox', { name: 'Expires after' })
+    expect(select).toHaveTextContent('24 hours')
+    await userEvent.click(select)
+    const labels = (await screen.findAllByRole('option')).map((o) => o.textContent?.trim())
+    // 5 minutes is below the minimum, 30 days above the maximum.
+    expect(labels).toEqual(['1 hour', '24 hours', '7 days'])
+
+    await userEvent.click(screen.getByRole('option', { name: '7 days' }))
+    await userEvent.type(screen.getByPlaceholderText('Type the secret here'), 'hi')
+    await userEvent.click(screen.getByRole('button', { name: 'Create link' }))
+    await screen.findByLabelText('Secret link')
+    expect(received[0].endsWith(' 604800')).toBe(true)
+  })
+
+  it('submits with Enter in the passphrase field and labels the file input', async () => {
+    render(ShareSecret)
+    expect(screen.getByLabelText('Or attach a file instead')).toHaveAttribute('type', 'file')
+    await userEvent.type(screen.getByPlaceholderText('Type the secret here'), 'enter')
+    await userEvent.type(screen.getByLabelText('Passphrase (optional)'), 'pw{Enter}')
+    expect(await screen.findByLabelText('Secret link')).toBeVisible()
+    expect(received).toHaveLength(1)
+  })
+
+  it('resets the file input once the link exists', async () => {
+    render(ShareSecret)
+    const input = screen.getByLabelText<HTMLInputElement>('Or attach a file instead')
+    await userEvent.upload(input, new File([new Uint8Array([1])], 'a.bin'))
+    expect(input.files).toHaveLength(1)
+    await userEvent.click(screen.getByRole('button', { name: 'Create link' }))
+    await screen.findByLabelText('Secret link')
+    expect(input.files).toHaveLength(0)
+    expect(input.value).toBe('')
+  })
+
+  it('refuses a file above the limit before reading it', async () => {
+    vi.mocked(getConfig).mockResolvedValue({
+      maxCiphertextBytes: 10,
+      lifetime: { minSeconds: 60, maxSeconds: 604800, defaultSeconds: 86400 },
+    })
+    render(ShareSecret)
+    await waitFor(() => expect(getConfig).toHaveBeenCalled())
+    await new Promise((r) => setTimeout(r, 0))
+    const file = new File([new Uint8Array(50)], 'big.bin')
+    const read = vi.spyOn(file, 'arrayBuffer')
+    await userEvent.upload(screen.getByLabelText('Or attach a file instead'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Create link' }))
+
+    expect(await screen.findByText(/too large/)).toBeVisible()
+    expect(read).not.toHaveBeenCalled()
+    expect(storeSecret).not.toHaveBeenCalled()
   })
 
   it('refuses a secret above the server limit before sending it', async () => {

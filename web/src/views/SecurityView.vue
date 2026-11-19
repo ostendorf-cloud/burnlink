@@ -258,9 +258,10 @@ version │ flags │ salt (16, only with a passphrase) │ iv (12) │ cipherte
           careless channel safe.
         </li>
         <li>
-          The sender's browser history and clipboard hold the whole link until they are cleared. The
-          link only works once, but it stays readable in the meantime. After a reveal, the page
-          removes the key from the address bar.
+          The recipient's browser records the whole link, key included, in its history when the page
+          loads, and the clipboard and any chat hold it too. Removing the key from the address bar
+          after a reveal does not remove that history entry. A link that was never revealed can
+          still be opened by someone with access to that browser. A revealed link is spent.
         </li>
         <li>
           This server cannot read a stored secret, but it serves the code that does the encrypting.

@@ -121,9 +121,12 @@ const { locale } = useLanguage()
       eine Anzeigewahl (hell oder dunkel, Sprache) in seinem lokalen Speicher behalten. Sie wird
       nicht an den Server gesendet. Darüber hinaus legt diese Seite heute nichts im Speicher Ihres
       Browsers ab. Ein Geheimnis, sein Klartext, der Schlüssel und eine Passphrase bleiben nur im
-      Arbeitsspeicher der geöffneten Seite und werden nirgends gespeichert. Nach dem Öffnen entfernt
-      die Seite den Schlüssel aus der Adresszeile. Der Link selbst steht in der Zwischenablage und
-      im Verlauf Ihres Browsers, wenn Sie ihn dort ablegen.
+      Arbeitsspeicher der geöffneten Seite und werden nirgends gespeichert. Beim Verlassen der Seite
+      löscht sie diese Inhalte aus dem Arbeitsspeicher. Nach dem Öffnen entfernt die Seite den
+      Schlüssel aus der Adresszeile. Der Link selbst steht in der Zwischenablage, und Ihr Browser
+      zeichnet ihn beim Laden der Seite samt Schlüssel in seinem Verlauf auf. Das Entfernen aus der
+      Adresszeile löscht diesen Verlaufseintrag nicht. Ein noch nicht geöffneter Link kann daher von
+      jemandem mit Zugriff auf Ihren Browser geöffnet werden.
     </p>
 
     <h2 class="text-xl font-semibold text-text">Ihre Rechte</h2>
@@ -241,8 +244,11 @@ const { locale } = useLanguage()
       display choice (light or dark, language) in its local storage. It is not sent to the server.
       Beyond that, this site stores nothing in your browser's storage today. A secret, its
       plaintext, the key and a passphrase stay in the memory of the open page only and are saved
-      nowhere. After a reveal, the page removes the key from the address bar. The link itself is in
-      your clipboard and your browser history if you put it there.
+      nowhere. When you leave the page, it clears them from memory. After a reveal, the page removes
+      the key from the address bar. The link itself is in your clipboard, and your browser records
+      it with the key in its history when the page loads. Removing the key from the address bar does
+      not delete that history entry, so someone with access to your browser can still open a link
+      that was not revealed yet.
     </p>
 
     <h2 class="text-xl font-semibold text-text">Your rights</h2>
