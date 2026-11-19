@@ -3,7 +3,7 @@ module github.com/ostendorf-cloud/burnlink
 go 1.27
 
 require (
-	github.com/ostendorf-cloud/govue v0.4.0
+	github.com/ostendorf-cloud/govue v0.5.0
 	github.com/redis/go-redis/v9 v9.23.0
 )
 
@@ -16,6 +16,6 @@ require (
 	github.com/prometheus/common v0.72.0 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
 	go.uber.org/atomic v1.12.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
