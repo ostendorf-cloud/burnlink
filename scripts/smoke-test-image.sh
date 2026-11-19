@@ -107,6 +107,19 @@ assert_status "/metrics" "404"
 assert_status "/" "200"
 assert_contains "/" "<html"
 
+# The pages the SPA answers, and no directory listing of its assets.
+assert_status "/security" "200"
+assert_contains "/security" "<html"
+assert_status "/r/smoke-test-id" "200"
+assert_status "/assets/" "404"
+
+# No UMAMI_URL and UMAMI_WEBSITE_ID are passed, so counting must be off and
+# the server must say so once at startup.
+if [[ "$(docker logs "$container" 2>&1)" != *"page view counting is off"* ]]; then
+  echo "startup log does not say that page view counting is off" >&2
+  fail=1
+fi
+
 if [[ $fail -ne 0 ]]; then
   echo "smoke test failed" >&2
   exit 1

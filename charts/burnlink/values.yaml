@@ -182,6 +182,21 @@ config:
     burst: ""
     per: ""
 
+  # The public host of the site, fed into SITE_HOST. Reported to Umami as the
+  # hostname of every counted page view. Required only when umami below is
+  # set; otherwise leave it empty.
+  siteHost: ""
+
+  # Page view counting through Umami, from the server, with no script and no
+  # cookie. Off unless both values are set; setting only one is rejected.
+  # Neither value is a secret: the website id is a public identifier.
+  umami:
+    # Base URL of the Umami instance, fed into UMAMI_URL, for example
+    # https://umami.example.com. https, or http for a name inside the cluster.
+    url: ""
+    # The website's UUID in Umami, fed into UMAMI_WEBSITE_ID.
+    websiteId: ""
+
 # The store's credentials. This chart never creates a Secret from plaintext
 # values: name an existing Secret that holds them. The Secret is mounted as
 # files and reaches the service through STORE_USERNAME_FILE and

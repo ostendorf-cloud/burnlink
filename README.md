@@ -54,6 +54,28 @@ public one.
 | `SECRET_LIFETIME_DEFAULT` | Lifetime used when none is asked for, between min and max | `24h` | no |
 | `RATE_LIMIT_BURST` | Requests per client address at once | `10` | no |
 | `RATE_LIMIT_PER` | Period over which the burst refills completely | `1m` | no |
+| `UMAMI_URL` | Base URL of the Umami instance that receives page views. Counting is off unless this and `UMAMI_WEBSITE_ID` are both set; one alone is a startup error | empty, off | no |
+| `UMAMI_WEBSITE_ID` | UUID of the website in Umami | empty, off | no |
+| `SITE_HOST` | Public host, reported to Umami as the hostname of a view | empty | only with Umami |
+| `UMAMI_TIMEOUT` | Bound of one post to Umami, 1s to 30s | `5s` | no |
+| `UMAMI_QUEUE_SIZE` | Views that may wait to be sent, 1 to 10000. A full queue drops the view | `256` | no |
+
+## Page view counting
+
+The server counts page views and reports them to Umami after the page was served, through
+govue's `analytics` package. Nothing runs in the browser and no cookie is set.
+
+- Counted: the route pattern of a page, such as `/` or `/r/{id}`, never the path, an id or a query
+  string. Every request link is the one entry `/r/{id}`.
+- Sent with it: the site's host, the first language tag, the user agent, the referring origin
+  without a path, and the client address masked to its /24 (IPv4) or /48 (IPv6).
+- Not counted: the API, files the page loads, the health and metrics routes, a visitor with Do
+  Not Track or Global Privacy Control, a prefetch, a bot and a client on a private address.
+- A slow or failing Umami never delays or fails a response.
+- The server still never receives a key or a plaintext: the key stays in the URL fragment.
+
+The text a visitor reads is on the security page (`web/src/views/SecurityView.vue`). The legal
+privacy notice of the operator is a separate text.
 
 ## Container
 

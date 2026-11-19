@@ -153,6 +153,19 @@ Known limits:
   something about who is involved in exchanging it, which the core design otherwise never
   collects.
 
+### Page view counting
+
+- Shape: govue's `analytics` package, wired directly around the mux in `cmd/burnlink`. Off unless
+  `UMAMI_URL` and `UMAMI_WEBSITE_ID` are both set. The server reports a view after the page was
+  served, so nothing reaches the browser and no cookie is set.
+- What is reported: the route pattern only, `/r/{id}` for every request link, never an id, a
+  query string or the URL fragment. The fragment never reaches the server at all. The client
+  address is masked to its /24 or /48. Do Not Track, Global Privacy Control, prefetch, bots and
+  private client addresses are left out, and so are the API and every file the page loads.
+- Effect: a counted view says that some page was opened. It never says which link, and a reveal is
+  not an event. The server still never receives a key or a plaintext.
+- The visitor facing text is the "What is counted" section of the security page.
+
 ## Alternatives considered
 
 - Keep rewriting old_burnlink in place. Smaller change, no new repository. Rejected: old_burnlink's

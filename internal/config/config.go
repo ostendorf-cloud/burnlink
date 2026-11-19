@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"os"
 
+	"github.com/ostendorf-cloud/govue/analytics"
 	"github.com/ostendorf-cloud/govue/clientip"
 	"github.com/ostendorf-cloud/govue/envconf"
 	"github.com/ostendorf-cloud/govue/logging"
@@ -45,6 +46,14 @@ type Config struct {
 	Secrets Secrets
 	// RateLimit is the per client address budget of the secret endpoints.
 	RateLimit RateLimit
+
+	// Umami is the page view counting of govue's analytics package. It is
+	// off unless UMAMI_URL and UMAMI_WEBSITE_ID are both set.
+	Umami analytics.Config
+	// SiteHost is the public host of the site, reported to Umami as the
+	// hostname of every view. It comes from SITE_HOST, never from the Host
+	// header of a request. It is required when Umami is enabled.
+	SiteHost string
 }
 
 // Load reads every setting through envconf, so a misconfigured deployment
@@ -72,6 +81,16 @@ func Load(getenv func(string) string) (Config, error) {
 		problems = append(problems, err)
 	}
 	cfg.TrustedProxies = trustedProxies
+
+	cfg.SiteHost = l.String("SITE_HOST", "")
+	umami, err := analytics.LoadConfig(getenv)
+	if err != nil {
+		problems = append(problems, err)
+	}
+	cfg.Umami = umami
+	if umami.Enabled() && cfg.SiteHost == "" {
+		problems = append(problems, errors.New("SITE_HOST must be set to the public host when UMAMI_URL and UMAMI_WEBSITE_ID are set"))
+	}
 
 	if err := errors.Join(append(problems, l.Err())...); err != nil {
 		return Config{}, fmt.Errorf("config: %w", err)

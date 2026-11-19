@@ -19,10 +19,24 @@ describe('SecurityView', () => {
       /a passphrase on top/i,
       /one link, one read/i,
       /a request link keeps its key/i,
+      /what is counted/i,
       /where this stops helping/i,
     ]) {
       expect(screen.getByRole('heading', { name: heading })).toBeVisible()
     }
+  })
+
+  it('states what is counted and what is not, and that no key or plaintext arrives', () => {
+    render(SecurityView)
+
+    const counting = screen.getByTestId('counting')
+    expect(counting).toHaveTextContent(/no cookie/i)
+    expect(counting).toHaveTextContent(/\/r\/\{id\}/)
+    expect(counting).toHaveTextContent(/do not track/i)
+    expect(counting).toHaveTextContent(/global privacy control/i)
+    expect(counting).toHaveTextContent(/prefetch/i)
+    expect(counting).toHaveTextContent(/query string/i)
+    expect(counting).toHaveTextContent(/never receives a key or a plaintext/i)
   })
 
   it('names the key fragment and the one time read', () => {
