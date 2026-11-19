@@ -297,8 +297,15 @@ func TestAnalyticsNeverDelaysOrFailsAResponse(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			release := make(chan struct{})
 			stub := newUmamiStub(t, tt.handle(release))
-			t.Cleanup(func() { close(release) })
 			c := newCounting(t, stub)
+			// Cleanups run last in, first out: release the stub first, then
+			// close the client so its workers end, then the stub closes.
+			t.Cleanup(func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = c.views.Close(ctx)
+			})
+			t.Cleanup(func() { close(release) })
 
 			done := make(chan int, 1)
 			go func() { done <- c.get(t, "/security").Code }()

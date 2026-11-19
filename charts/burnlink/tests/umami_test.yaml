@@ -85,6 +85,16 @@ tests:
     asserts:
       - failedTemplate: {}
 
+  - it: rejects an upper case website id through the schema
+    set:
+      config:
+        siteHost: burnlink.example.com
+        umami:
+          url: https://umami.example.com
+          websiteId: 0B1D3A52-7C0E-4F55-9F3C-2F6A7D8E9C10
+    asserts:
+      - failedTemplate: {}
+
   - it: rejects a url that is no http or https url through the schema
     set:
       config:

@@ -2,8 +2,10 @@
 #
 # Starts the container image given as $1 and asserts it actually serves
 # something real: health, readiness and metrics on the admin listener, the
-# built SPA's index.html on the public one, and that the public listener
-# itself does not answer /metrics. Run by the docker-build job in
+# built SPA's index.html on the public one, the /security and /r/<id> pages,
+# a 404 for a directory such as /assets/, the startup line that says page
+# view counting is off, and that the public listener itself does not answer
+# /metrics. Run by the docker-build job in
 # .github/workflows/checks.yaml right after it builds and loads the image,
 # so this never needs a registry.
 #

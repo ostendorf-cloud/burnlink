@@ -38,7 +38,9 @@ helm install burnlink charts/burnlink --set config.store.addr=valkey:6379
 
 Page view counting is off unless `config.umami.url` and `config.umami.websiteId` are both set.
 Setting one alone, or both without `config.siteHost`, fails the render. With none of them set the
-release works as before.
+release works as before. The schema accepts a plain `http` `config.umami.url`, but the
+application refuses it at startup unless the host is `localhost`, a loopback address or a name
+inside the cluster.
 
 The rate limit budget lives in each pod, so a release with several replicas allows the burst once
 per replica.
