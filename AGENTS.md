@@ -40,9 +40,9 @@ The global baseline already applies here and is not repeated below.
   middleware would hide). `UMAMI_URL` and `UMAMI_WEBSITE_ID` come from
   `internal/config`, and so does `SITE_URL` (default `https://burnlink.de`), whose bare hostname
   is the one reported. `mountLegal` rewrites the origin the web build bakes into the legal
-  pages, `sitemap.xml` and `robots.txt` to `SITE_URL`. Never count an id, a query or an API route; the tests in
-  `cmd/burnlink/analytics_test.go` pin that. A change to what is reported also changes the
-  "What is counted" card in `SecurityView.vue`.
+  pages, `sitemap.xml` and `robots.txt` to `SITE_URL`. Never count an id, a query or an API
+  route; the tests in `cmd/burnlink/analytics_test.go` pin that. A change to what is reported
+  also changes the "What is counted" card in `SecurityView.vue`.
 - The legal pages (`web/src/legal/`: `ImprintText.vue`, `PrivacyText.vue`, `LegalView.vue`) are
   the site's own texts in German and English. `web/src/site.ts` is the SSR entry: `pnpm run
   build` runs the client build, the SSR build into `web/.ssr`, `govue-prerender --out-dir` and
