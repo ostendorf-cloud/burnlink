@@ -6,9 +6,12 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/ostendorf-cloud/burnlink/internal/config"
 )
 
 func getPath(t *testing.T, h http.Handler, path string, opts ...reqOpt) *httptest.ResponseRecorder {
@@ -133,8 +136,60 @@ func TestMountLegalFailsWhenABuiltPageIsMissing(t *testing.T) {
 		"de/imprint/index.html": {Data: []byte("x")},
 		"de/privacy/index.html": {Data: []byte("x")},
 		"en/imprint/index.html": {Data: []byte("x")},
+		"robots.txt":            {Data: []byte("x")},
+		"sitemap.xml":           {Data: []byte("x")},
 	}
-	if err := mountLegal(http.NewServeMux(), dist); err == nil || !strings.Contains(err.Error(), "en/privacy/index.html") {
+	site := &url.URL{Scheme: "https", Host: "burnlink.de"}
+	if err := mountLegal(http.NewServeMux(), dist, site); err == nil || !strings.Contains(err.Error(), "en/privacy/index.html") {
 		t.Fatalf("mountLegal() error = %v, want one naming en/privacy/index.html", err)
+	}
+}
+
+func siteHandler(t *testing.T, siteURL string) http.Handler {
+	t.Helper()
+	cfg, err := config.Load(func(key string) string {
+		switch key {
+		case "STORE_ADDR":
+			return "store.invalid:6379"
+		case "SITE_URL":
+			return siteURL
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	h, err := buildHandler(testLogger(), cfg, testVault())
+	if err != nil {
+		t.Fatalf("buildHandler() error = %v", err)
+	}
+	return h
+}
+
+func TestSiteURLReachesRobotsSitemapAndCanonicalLinks(t *testing.T) {
+	h := siteHandler(t, "https://staging.burnlink.test")
+	for _, path := range []string{"/robots.txt", "/sitemap.xml", "/de/imprint", "/en/privacy"} {
+		rec := getPath(t, h, path)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200", path, rec.Code)
+		}
+		body := rec.Body.String()
+		if strings.Contains(body, config.DefaultSiteURL) {
+			t.Errorf("GET %s still names %s", path, config.DefaultSiteURL)
+		}
+		if !strings.Contains(body, "https://staging.burnlink.test") {
+			t.Errorf("GET %s does not name the configured origin", path)
+		}
+	}
+	if got := getPath(t, h, "/robots.txt").Header().Get("Content-Type"); !strings.HasPrefix(got, "text/plain") {
+		t.Errorf("robots.txt Content-Type = %q, want text/plain", got)
+	}
+}
+
+func TestDefaultSiteURLLeavesTheBuiltFilesAsTheyAre(t *testing.T) {
+	h := siteHandler(t, "")
+	body := getPath(t, h, "/robots.txt").Body.String()
+	if !strings.Contains(body, "Sitemap: "+config.DefaultSiteURL+"/sitemap.xml") {
+		t.Errorf("robots.txt = %q, want the default sitemap URL", body)
 	}
 }

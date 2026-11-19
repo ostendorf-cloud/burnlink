@@ -29,9 +29,6 @@ spec:
   {{- if and .Values.ingress.enabled (not .Values.config.trustedProxies) }}
   {{ fail "config.trustedProxies must be set when ingress.enabled is true: clientip.NewResolver with no trusted prefixes attributes every request to its TCP peer, which behind this chart's own Ingress is the ingress controller's pod IP, collapsing every per-address rate limit into one shared bucket for every sender. Set it to the ingress controller's pod or Service CIDR; see README.md." }}
   {{- end }}
-  {{- if and .Values.config.umami.url .Values.config.umami.websiteId (not .Values.config.siteHost) }}
-  {{ fail "config.siteHost must be set to the public host when config.umami.url and config.umami.websiteId are set: it is the hostname every counted page view carries." }}
-  {{- end }}
   {{- if and (or .Values.config.umami.url .Values.config.umami.websiteId) (not (and .Values.config.umami.url .Values.config.umami.websiteId)) }}
   {{ fail "config.umami.url and config.umami.websiteId must be set together or not at all." }}
   {{- end }}
@@ -122,9 +119,9 @@ spec:
             - name: RATE_LIMIT_PER
               value: {{ .Values.config.rateLimit.per | quote }}
             {{- end }}
-            {{- if .Values.config.siteHost }}
-            - name: SITE_HOST
-              value: {{ .Values.config.siteHost | quote }}
+            {{- if .Values.config.siteUrl }}
+            - name: SITE_URL
+              value: {{ .Values.config.siteUrl | quote }}
             {{- end }}
             {{- if .Values.config.umami.url }}
             - name: UMAMI_URL
