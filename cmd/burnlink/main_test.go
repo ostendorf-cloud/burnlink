@@ -59,11 +59,11 @@ func testVault() *store.Secrets { return store.NewSecrets(memBackend{memstore.Ne
 func TestBuildHandlerAppliesTheConfiguration(t *testing.T) {
 	cfg, err := config.Load(func(key string) string {
 		return map[string]string{
-			"STORE_ADDR":          "store.invalid:6379",
-			"SECRET_MAX_BYTES":    "16",
-			"RATE_LIMIT_BURST":    "1",
-			"RATE_LIMIT_PER":      "1h",
-			"TRUSTED_PROXY_CIDRS": "10.0.0.0/8",
+			"STORE_ADDR":       "store.invalid:6379",
+			"SECRET_MAX_BYTES": "16",
+			"RATE_LIMIT_BURST": "1",
+			"RATE_LIMIT_PER":   "1h",
+			"TRUSTED_PROXIES":  "10.0.0.0/8",
 		}[key]
 	})
 	if err != nil {

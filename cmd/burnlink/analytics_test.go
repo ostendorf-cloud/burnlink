@@ -62,11 +62,11 @@ func newCounting(t *testing.T, stub *umamiStub) *counting {
 	t.Helper()
 	cfg, err := config.Load(func(key string) string {
 		return map[string]string{
-			"STORE_ADDR":          "store.invalid:6379",
-			"UMAMI_URL":           stub.srv.URL,
-			"UMAMI_WEBSITE_ID":    testWebsiteID,
-			"SITE_HOST":           "burnlink.test",
-			"TRUSTED_PROXY_CIDRS": "10.0.0.0/8",
+			"STORE_ADDR":       "store.invalid:6379",
+			"UMAMI_URL":        stub.srv.URL,
+			"UMAMI_WEBSITE_ID": testWebsiteID,
+			"SITE_HOST":        "burnlink.test",
+			"TRUSTED_PROXIES":  "10.0.0.0/8",
 		}[key]
 	})
 	if err != nil {
@@ -220,7 +220,7 @@ func TestAnalyticsSkipsAnAPIPathEvenWhenItAnswersHTML(t *testing.T) {
 		return map[string]string{
 			"STORE_ADDR": "store.invalid:6379", "UMAMI_URL": stub.srv.URL,
 			"UMAMI_WEBSITE_ID": testWebsiteID, "SITE_HOST": "burnlink.test",
-			"TRUSTED_PROXY_CIDRS": "10.0.0.0/8",
+			"TRUSTED_PROXIES": "10.0.0.0/8",
 		}[key]
 	})
 	if err != nil {

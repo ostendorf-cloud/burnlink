@@ -86,8 +86,8 @@ func TestLoadOverridesEachVariable(t *testing.T) {
 			},
 		},
 		{
-			name: "TRUSTED_PROXY_CIDRS",
-			env:  map[string]string{"TRUSTED_PROXY_CIDRS": "10.0.0.0/8, 192.168.1.1"},
+			name: "TRUSTED_PROXIES",
+			env:  map[string]string{"TRUSTED_PROXIES": "10.0.0.0/8, 192.168.1.1"},
 			check: func(t *testing.T, cfg Config) {
 				want := []netip.Prefix{
 					netip.MustParsePrefix("10.0.0.0/8"),
@@ -136,9 +136,9 @@ func TestLoadRejectsAnInvalidLogLevel(t *testing.T) {
 func TestLoadRejectsAnInvalidTrustedProxyCIDR(t *testing.T) {
 	t.Parallel()
 
-	_, err := Load(env(withStore(map[string]string{"TRUSTED_PROXY_CIDRS": "not-a-cidr"})))
+	_, err := Load(env(withStore(map[string]string{"TRUSTED_PROXIES": "not-a-cidr"})))
 	if err == nil {
-		t.Fatal("Load() error = nil, want an error for an invalid TRUSTED_PROXY_CIDRS entry")
+		t.Fatal("Load() error = nil, want an error for an invalid TRUSTED_PROXIES entry")
 	}
 	if !strings.Contains(err.Error(), "config:") {
 		t.Errorf("Load() error = %q, want it wrapped with \"config:\"", err.Error())
