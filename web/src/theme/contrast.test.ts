@@ -119,6 +119,15 @@ const css = readFileSync(themePath, 'utf-8')
 const { light, dark } = tokens(css)
 
 describe('the burnlink theme', () => {
+  it('is selected by the name in the seeds file and set on the html element', () => {
+    const seeds = JSON.parse(
+      readFileSync(join(process.cwd(), 'src/theme/burnlink.seeds.json'), 'utf-8'),
+    )
+    const html = readFileSync(join(process.cwd(), 'index.html'), 'utf-8')
+    expect(css).toContain(`:root[data-theme='${seeds.name}']`)
+    expect(html).toMatch(new RegExp(`<html[^>]*data-theme="${seeds.name}"`))
+  })
+
   it('declares every text pair at 4.5:1 in light mode', () => {
     expect(failures(light, TEXT_PAIRS, TEXT_MINIMUM)).toEqual([])
   })
