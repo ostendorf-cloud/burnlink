@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"net/url"
 	"os"
 
 	"github.com/ostendorf-cloud/govue/analytics"
@@ -17,6 +18,12 @@ import (
 	"github.com/ostendorf-cloud/govue/envconf"
 	"github.com/ostendorf-cloud/govue/logging"
 )
+
+// DefaultSiteURL is this site's own public origin, used when SITE_URL is
+// unset. It is also the origin the web build bakes into the prerendered
+// legal pages, sitemap.xml and robots.txt, which the server rewrites to
+// SiteURL when the two differ.
+const DefaultSiteURL = "https://burnlink.de"
 
 // Config is every setting this binary reads from the environment. The
 // store's credentials are its only secret-shaped fields, and each has a
@@ -50,10 +57,11 @@ type Config struct {
 	// Umami is the page view counting of govue's analytics package. It is
 	// off unless UMAMI_URL and UMAMI_WEBSITE_ID are both set.
 	Umami analytics.Config
-	// SiteHost is the public host of the site, reported to Umami as the
-	// hostname of every view. It comes from SITE_HOST, never from the Host
-	// header of a request. It is required when Umami is enabled.
-	SiteHost string
+	// SiteURL is the public origin of the site: the base of every absolute
+	// URL it publishes and, through its Hostname, the hostname reported to
+	// Umami for every view. It comes from SITE_URL, never from the Host
+	// header of a request.
+	SiteURL *url.URL
 }
 
 // Load reads every setting through envconf, so a misconfigured deployment
@@ -82,20 +90,37 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	cfg.TrustedProxies = trustedProxies
 
-	cfg.SiteHost = l.String("SITE_HOST", "")
+	cfg.SiteURL = loadSiteURL(l, &problems)
 	umami, err := analytics.LoadConfig(getenv)
 	if err != nil {
 		problems = append(problems, err)
 	}
 	cfg.Umami = umami
-	if umami.Enabled() && cfg.SiteHost == "" {
-		problems = append(problems, errors.New("SITE_HOST must be set to the public host when UMAMI_URL and UMAMI_WEBSITE_ID are set"))
-	}
 
 	if err := errors.Join(append(problems, l.Err())...); err != nil {
 		return Config{}, fmt.Errorf("config: %w", err)
 	}
 	return cfg, nil
+}
+
+// loadSiteURL reads SITE_URL: an absolute origin with no path, query or
+// fragment, https unless the host is localhost. It is never empty, the
+// default being DefaultSiteURL, so Umami always has a hostname.
+func loadSiteURL(l *envconf.Loader, problems *[]error) *url.URL {
+	u := l.URL("SITE_URL", DefaultSiteURL)
+	switch {
+	case u == nil:
+		// envconf recorded the problem.
+	case u.Path != "":
+		*problems = append(*problems, fmt.Errorf("SITE_URL must be an origin without a path, got %q", u.String()))
+	case u.Scheme == "http" && !isLocalhost(u.Hostname()):
+		*problems = append(*problems, fmt.Errorf("SITE_URL must use https unless the host is localhost, got %q", u.String()))
+	}
+	return u
+}
+
+func isLocalhost(host string) bool {
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 // resolvedGetenv defaults a nil lookup function to the real process

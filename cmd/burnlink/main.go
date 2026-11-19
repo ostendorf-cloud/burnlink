@@ -122,7 +122,7 @@ const viewsCloseTimeout = 5 * time.Second
 // Without UMAMI_URL and UMAMI_WEBSITE_ID the client is inert.
 func newViews(logger *slog.Logger, cfg config.Config, httpClient *http.Client) (*analytics.Client, error) {
 	views, err := analytics.New(cfg.Umami, analytics.Options{
-		Hostname:   cfg.SiteHost,
+		Hostname:   cfg.SiteURL.Hostname(),
 		Logger:     logger,
 		HTTPClient: httpClient,
 		ClientIP:   clientip.NewResolver(cfg.TrustedProxies),
@@ -218,7 +218,7 @@ func buildPublicHandler(logger *slog.Logger, cfg config.Config, vault secrets.Va
 	}
 	mux.HandleFunc("GET /security", index)
 	mux.HandleFunc("GET /r/{id}", index)
-	if err := mountLegal(mux, dist); err != nil {
+	if err := mountLegal(mux, dist, cfg.SiteURL); err != nil {
 		return nil, err
 	}
 

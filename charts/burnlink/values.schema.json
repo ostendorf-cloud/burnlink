@@ -84,10 +84,10 @@
       "type": "object",
       "properties": {
         "trustedProxies": { "type": "string" },
-        "siteHost": {
+        "siteUrl": {
           "type": "string",
-          "description": "Public host of the site, fed into SITE_HOST. Required when config.umami is set; enforced by a template fail guard.",
-          "pattern": "^[^/@?# \\t]*$"
+          "description": "Public origin of the site, fed into SITE_URL. Empty keeps the application default https://burnlink.de.",
+          "pattern": "^(https?://[^/@?# \\t]+)?$"
         },
         "umami": {
           "type": "object",

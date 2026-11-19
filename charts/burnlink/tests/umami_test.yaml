@@ -19,19 +19,13 @@ tests:
           path: spec.template.spec.containers[0].env
           count: 1
 
-  - it: wires UMAMI_URL, UMAMI_WEBSITE_ID and SITE_HOST when all are set
+  - it: wires UMAMI_URL and UMAMI_WEBSITE_ID when both are set, with no site url needed
     set:
       config:
-        siteHost: burnlink.example.com
         umami:
           url: https://umami.example.com
           websiteId: 0b1d3a52-7c0e-4f55-9f3c-2f6a7d8e9c10
     asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: SITE_HOST
-            value: burnlink.example.com
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -42,11 +36,33 @@ tests:
           content:
             name: UMAMI_WEBSITE_ID
             value: 0b1d3a52-7c0e-4f55-9f3c-2f6a7d8e9c10
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: SITE_URL
+
+  - it: wires SITE_URL when config.siteUrl is set
+    set:
+      config:
+        siteUrl: https://burnlink.example.com
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SITE_URL
+            value: https://burnlink.example.com
+
+  - it: rejects a site url without a scheme through the schema
+    set:
+      config:
+        siteUrl: burnlink.example.com
+    asserts:
+      - failedTemplate: {}
 
   - it: fails when only the url is set
     set:
       config:
-        siteHost: burnlink.example.com
         umami:
           url: https://umami.example.com
     asserts:
@@ -56,29 +72,15 @@ tests:
   - it: fails when only the website id is set
     set:
       config:
-        siteHost: burnlink.example.com
         umami:
           websiteId: 0b1d3a52-7c0e-4f55-9f3c-2f6a7d8e9c10
     asserts:
       - failedTemplate:
           errorMessage: config.umami.url and config.umami.websiteId must be set together or not at all.
 
-  - it: fails when umami is set without siteHost
-    set:
-      config:
-        umami:
-          url: https://umami.example.com
-          websiteId: 0b1d3a52-7c0e-4f55-9f3c-2f6a7d8e9c10
-    asserts:
-      - failedTemplate:
-          errorMessage: >-
-            config.siteHost must be set to the public host when config.umami.url and
-            config.umami.websiteId are set: it is the hostname every counted page view carries.
-
   - it: rejects a website id that is no UUID through the schema
     set:
       config:
-        siteHost: burnlink.example.com
         umami:
           url: https://umami.example.com
           websiteId: not-a-uuid
@@ -88,7 +90,6 @@ tests:
   - it: rejects an upper case website id through the schema
     set:
       config:
-        siteHost: burnlink.example.com
         umami:
           url: https://umami.example.com
           websiteId: 0B1D3A52-7C0E-4F55-9F3C-2F6A7D8E9C10
@@ -98,7 +99,6 @@ tests:
   - it: rejects a url that is no http or https url through the schema
     set:
       config:
-        siteHost: burnlink.example.com
         umami:
           url: ftp://umami.example.com
           websiteId: 0b1d3a52-7c0e-4f55-9f3c-2f6a7d8e9c10

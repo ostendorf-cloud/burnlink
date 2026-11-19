@@ -182,10 +182,12 @@ config:
     burst: ""
     per: ""
 
-  # The public host of the site, fed into SITE_HOST. Reported to Umami as the
-  # hostname of every counted page view. Required only when umami below is
-  # set; otherwise leave it empty.
-  siteHost: ""
+  # The public origin of the site, fed into SITE_URL: an origin with no path,
+  # such as https://burnlink.de. It is the base of the sitemap, robots.txt
+  # and canonical links, and its bare host is reported to Umami as the
+  # hostname of every counted page view. Empty keeps the application default
+  # https://burnlink.de.
+  siteUrl: ""
 
   # Page view counting through Umami, from the server, with no script and no
   # cookie. Off unless both values are set; setting only one is rejected.

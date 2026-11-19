@@ -56,7 +56,7 @@ public one.
 | `RATE_LIMIT_PER` | Period over which the burst refills completely | `1m` | no |
 | `UMAMI_URL` | Base URL of the Umami instance that receives page views. Counting is off unless this and `UMAMI_WEBSITE_ID` are both set; one alone is a startup error | empty, off | no |
 | `UMAMI_WEBSITE_ID` | UUID of the website in Umami | empty, off | no |
-| `SITE_HOST` | Public host, reported to Umami as the hostname of a view | empty | only with Umami |
+| `SITE_URL` | Public origin without a path, https unless localhost. Base of the sitemap, robots.txt and canonical links; its bare host is reported to Umami as the hostname of a view | `https://burnlink.de` | no |
 | `UMAMI_TIMEOUT` | Bound of one post to Umami, 1s to 30s | `5s` | no |
 | `UMAMI_QUEUE_SIZE` | Views that may wait to be sent, 1 to 10000. A full queue drops the view | `256` | no |
 
