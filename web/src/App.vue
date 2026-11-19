@@ -56,5 +56,5 @@ const footerLinks = [{ href: '/security', label: 'How the encryption works' }]
     <CreateRequestLink />
   </GovuePage>
 
-  <GovueFooter :links="footerLinks" />
+  <GovueFooter :legal="['imprint', 'privacy']" :links="footerLinks" />
 </template>

@@ -75,7 +75,19 @@ govue's `analytics` package. Nothing runs in the browser and no cookie is set.
 - The server still never receives a key or a plaintext: the key stays in the URL fragment.
 
 The text a visitor reads is on the security page (`web/src/views/SecurityView.vue`). The legal
-privacy notice of the operator is a separate text.
+privacy notice of the operator is `web/src/legal/PrivacyText.vue`.
+
+## Legal pages
+
+- `/de/imprint`, `/en/imprint`, `/de/privacy` and `/en/privacy` are prerendered at build time
+  with govue's `GovueLegalPage` and `govue-prerender`, and served by `cmd/burnlink/legal.go`.
+- `language.HandleLegal` redirects `/imprint`, `/privacy` and the German aliases `/impressum`,
+  `/datenschutz` and `/datenschutzerklaerung` to the matching page. There is no terms page, so
+  `/terms` and `/agb` answer 404.
+- `govue-check-legal` runs in `pnpm run build` and fails when a prerendered page lacks the
+  footer links.
+- A change to what the server stores, logs or counts changes `PrivacyText.vue` in the same
+  commit.
 
 ## Container
 

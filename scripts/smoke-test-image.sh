@@ -114,6 +114,11 @@ assert_status "/security" "200"
 assert_contains "/security" "<html"
 assert_status "/r/smoke-test-id" "200"
 assert_status "/assets/" "404"
+# The prerendered legal pages are served, and the German alias redirects.
+assert_status "/de/imprint" "200"
+assert_status "/en/privacy" "200"
+assert_status "/impressum" "302"
+assert_status "/terms" "404"
 
 # No UMAMI_URL and UMAMI_WEBSITE_ID are passed, so counting must be off and
 # the server must say so once at startup.

@@ -218,6 +218,9 @@ func buildPublicHandler(logger *slog.Logger, cfg config.Config, vault secrets.Va
 	}
 	mux.HandleFunc("GET /security", index)
 	mux.HandleFunc("GET /r/{id}", index)
+	if err := mountLegal(mux, dist); err != nil {
+		return nil, err
+	}
 
 	accessLog := middleware.AccessLog{ClientIP: clientIPs}
 	security := middleware.DefaultSecurity()

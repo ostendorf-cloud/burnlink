@@ -41,6 +41,14 @@ The global baseline already applies here and is not repeated below.
   `internal/config`. Never count an id, a query or an API route; the tests in
   `cmd/burnlink/analytics_test.go` pin that. A change to what is reported also changes the
   "What is counted" card in `SecurityView.vue`.
+- The legal pages (`web/src/legal/`: `ImprintText.vue`, `PrivacyText.vue`, `LegalView.vue`) are
+  the site's own texts in German and English. `web/src/site.ts` is the SSR entry: `pnpm run
+  build` runs the client build, the SSR build into `web/.ssr`, `govue-prerender --out-dir` and
+  `govue-check-legal`, all into `cmd/burnlink/dist`. `cmd/burnlink/legal.go` serves the four
+  pages and mounts `language.HandleLegal` without `Terms`: the site has no terms, so no
+  `/terms` and no `/agb`. `main.ts` mounts the legal view when the path is a legal page, else
+  `App`. A change to what the server stores, logs or counts changes `PrivacyText.vue` in the
+  same commit.
 - `internal/webapp/requestlink` answers the request link's own endpoints: create a link, submit a
   sealed payload to it, and open everything waiting for the owner. Written against
   `internal/store.Store`, not against `memstore` directly, so swapping in the real client changes

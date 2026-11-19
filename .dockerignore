@@ -7,5 +7,6 @@ bin
 docs
 web/node_modules
 web/dist
+web/.ssr
 cmd/burnlink/dist
 charts
