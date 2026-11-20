@@ -100,6 +100,9 @@ Builds the image from `Dockerfile` (a Node stage for the frontend, a Go stage fo
 distroless runtime) and publishes both listeners on `127.0.0.1`. The Helm chart lives in
 `charts/burnlink`; see its own `README.md` for installation and values.
 
+The published image `ghcr.io/ostendorf-cloud/burnlink` is one manifest list for `linux/amd64` and
+`linux/arm64`.
+
 ## Development
 
 ```sh
