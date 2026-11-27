@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -25,6 +26,8 @@ type renovateConfig struct {
 		DatasourceTemplate  string   `json:"datasourceTemplate"`
 	} `json:"customManagers"`
 	PackageRules []struct {
+		Description       string            `json:"description"`
+		AllowedVersions   string            `json:"allowedVersions"`
 		MatchPackageNames []string          `json:"matchPackageNames"`
 		MatchManagers     []string          `json:"matchManagers"`
 		GroupName         string            `json:"groupName"`
@@ -269,4 +272,27 @@ func TestRenovateGovueConstraintMatchesMise(t *testing.T) {
 	}
 
 	t.Fatal("renovate.json has no package rule for govue")
+}
+
+// TestRenovateHoldsTypescriptBelowSeven fails when renovate.json loses the rule that keeps
+// TypeScript below 7, or changes its range, or drops the description that names when to
+// remove it. typescript-eslint and vue-tsc do not support 7 yet, so a 7.0 pull request
+// would fail on import.
+func TestRenovateHoldsTypescriptBelowSeven(t *testing.T) {
+	t.Parallel()
+
+	for _, rule := range readRenovateConfig(t).PackageRules {
+		if !slices.Contains(rule.MatchPackageNames, "typescript") {
+			continue
+		}
+		if rule.AllowedVersions != "<7" {
+			t.Fatalf("the typescript rule allows %q, want %q", rule.AllowedVersions, "<7")
+		}
+		if !strings.Contains(rule.Description, "Remove this rule when") {
+			t.Fatalf("the typescript rule's description %q does not name the condition to remove it", rule.Description)
+		}
+		return
+	}
+
+	t.Fatal("renovate.json has no package rule for typescript")
 }
