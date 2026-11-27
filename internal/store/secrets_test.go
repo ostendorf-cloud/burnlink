@@ -279,6 +279,99 @@ func TestExists(t *testing.T) {
 	wantBackendError(t, err)
 }
 
+func TestPutTargetAndTakeTarget(t *testing.T) {
+	t.Parallel()
+
+	f, now := newFake()
+	s := store.NewSecrets(f)
+	ctx := t.Context()
+	const target = "https://hooks.example.com/x"
+
+	mustNil(t, s.PutTarget(ctx, "id", target, time.Minute))
+	if err := s.PutTarget(ctx, "id", "https://other.example.com/", time.Minute); !errors.Is(err, store.ErrExists) {
+		t.Errorf("second PutTarget() error = %v, want ErrExists", err)
+	}
+
+	got, err := s.TakeTarget(ctx, "id")
+	mustNil(t, err)
+	if got != target {
+		t.Errorf("TakeTarget() = %q, want the first value", got)
+	}
+	// Taken once: gone for the next reader.
+	got, err = s.TakeTarget(ctx, "id")
+	mustNil(t, err)
+	if got != "" {
+		t.Errorf("second TakeTarget() = %q, want empty", got)
+	}
+
+	// No target is the default, not an error.
+	got, err = s.TakeTarget(ctx, "never-set")
+	mustNil(t, err)
+	if got != "" {
+		t.Errorf("TakeTarget(unknown) = %q, want empty", got)
+	}
+
+	// The target ends with the lifetime it was given.
+	mustNil(t, s.PutTarget(ctx, "short", target, time.Second))
+	*now = now.Add(time.Second)
+	got, err = s.TakeTarget(ctx, "short")
+	mustNil(t, err)
+	if got != "" {
+		t.Errorf("TakeTarget(expired) = %q, want empty", got)
+	}
+}
+
+func TestTargetIsSeparateFromTheSecret(t *testing.T) {
+	t.Parallel()
+
+	f, _ := newFake()
+	s := store.NewSecrets(f)
+	ctx := t.Context()
+	mustNil(t, s.Put(ctx, "id", []byte("cipher"), time.Minute))
+	mustNil(t, s.PutTarget(ctx, "id", "https://hooks.example.com/x", time.Minute))
+
+	// The secret's stored bytes are the ciphertext and nothing else.
+	raw, ok, err := f.Get(ctx, store.SecretKeyPrefix+"id")
+	mustNil(t, err)
+	if !ok || string(raw) != "cipher" {
+		t.Errorf("secret key = %q, %v, want the ciphertext untouched", raw, ok)
+	}
+	// Taking the secret leaves the target for TakeTarget, and the reverse.
+	got, err := s.Take(ctx, "id")
+	mustNil(t, err)
+	if string(got) != "cipher" {
+		t.Errorf("Take() = %q, want the ciphertext", got)
+	}
+	target, err := s.TakeTarget(ctx, "id")
+	mustNil(t, err)
+	if target != "https://hooks.example.com/x" {
+		t.Errorf("TakeTarget() = %q, want the target", target)
+	}
+}
+
+func TestPutTargetRefusesANonPositiveTTL(t *testing.T) {
+	t.Parallel()
+
+	for _, ttl := range []time.Duration{0, -time.Second} {
+		f, _ := newFake()
+		wantError(t, store.NewSecrets(f).PutTarget(t.Context(), "id", "https://hooks.example.com/x", ttl))
+		if f.setCalls != 0 {
+			t.Errorf("ttl %v reached the store (%d calls)", ttl, f.setCalls)
+		}
+	}
+}
+
+func TestTargetBackendFailureIsNotASentinel(t *testing.T) {
+	t.Parallel()
+
+	f, _ := newFake()
+	f.failWith = errBoom
+	s := store.NewSecrets(f)
+	wantBackendError(t, s.PutTarget(t.Context(), "id", "https://hooks.example.com/x", time.Minute))
+	_, err := s.TakeTarget(t.Context(), "id")
+	wantBackendError(t, err)
+}
+
 func TestPing(t *testing.T) {
 	t.Parallel()
 

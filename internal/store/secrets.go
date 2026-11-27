@@ -119,6 +119,50 @@ func (s *Secrets) Exists(ctx context.Context, id string) (bool, error) {
 	return ok, nil
 }
 
+// TargetKeyPrefix is put in front of the id of every pickup notification
+// target. A target is the one thing besides ciphertext this service stores
+// about a secret, and it lives under its own key so the secret's stored
+// bytes, and every secret stored before targets existed, stay as they are.
+const TargetKeyPrefix = "notify:"
+
+// PutTarget stores a pickup notification target, a webhook URL, under id for
+// ttl. Give it the lifetime of the secret it belongs to, and call it before
+// Put: the target then expires no later than the secret, and a secret that
+// can be taken always has its target in place. It returns ErrExists when the
+// id already holds a target.
+//
+// The target is plain text in the store. Unlike the ciphertext, the server
+// can read it, and the page says so.
+func (s *Secrets) PutTarget(ctx context.Context, id, target string, ttl time.Duration) error {
+	if ttl <= 0 {
+		return errors.New("store: put target: ttl must be positive")
+	}
+	ok, err := s.backend.SetNX(ctx, TargetKeyPrefix+id, []byte(target), ttl)
+	if err != nil {
+		return fmt.Errorf("store: put target: %w", err)
+	}
+	if !ok {
+		return ErrExists
+	}
+	return nil
+}
+
+// TakeTarget returns the target stored under id and deletes it in one store
+// operation. It returns an empty string, and no error, when there is none: a
+// secret without a notification is the default, not a failure. Call it after
+// Take has handed the secret out, so only the reader who got the secret gets
+// the target.
+func (s *Secrets) TakeTarget(ctx context.Context, id string) (string, error) {
+	value, ok, err := s.backend.GetDel(ctx, TargetKeyPrefix+id)
+	if err != nil {
+		return "", fmt.Errorf("store: take target: %w", err)
+	}
+	if !ok {
+		return "", nil
+	}
+	return string(value), nil
+}
+
 // Ping reports whether the store is reachable, for the readiness probe. Its
 // error text can reach a log, so a Backend must keep credentials out of it.
 func (s *Secrets) Ping(ctx context.Context) error {
