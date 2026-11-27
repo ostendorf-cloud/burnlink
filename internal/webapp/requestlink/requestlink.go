@@ -6,10 +6,10 @@
 // link, a stranger submits a secret back through it, and only the owner can
 // open what arrives.
 //
-// The server never sees any key material, exactly as the send flow. It
-// stores and serves ciphertext it cannot decrypt, through store.Store, plus
-// the small amount of new, non-secret state a request link needs to enforce
-// its own limits: see Metadata.
+// The server is never given a public or private key. It stores and serves
+// ciphertext it cannot decrypt, through store.Store, plus the small amount
+// of new state a request link needs to enforce its own limits and to check
+// the owner: see Metadata, which holds the hash of the owner auth value.
 package requestlink
 
 import (
