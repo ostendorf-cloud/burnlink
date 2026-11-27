@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -25,6 +26,8 @@ type renovateConfig struct {
 		DatasourceTemplate  string   `json:"datasourceTemplate"`
 	} `json:"customManagers"`
 	PackageRules []struct {
+		Description       string            `json:"description"`
+		AllowedVersions   string            `json:"allowedVersions"`
 		MatchPackageNames []string          `json:"matchPackageNames"`
 		MatchManagers     []string          `json:"matchManagers"`
 		GroupName         string            `json:"groupName"`
@@ -153,9 +156,77 @@ func TestRenovateManagerReadsGovueSpecifier(t *testing.T) {
 	t.Fatal("renovate.json has no regex custom manager for ostendorf-cloud/govue")
 }
 
+// dockerfilePath is the Dockerfile, relative to this package.
+const dockerfilePath = "../../Dockerfile"
+
+// dockerfilePnpmArg matches the PNPM_VERSION argument of the Dockerfile.
+var dockerfilePnpmArg = regexp.MustCompile(`(?m)^ARG PNPM_VERSION=(\S+)$`)
+
+// TestDockerfilePnpmMatchesMise fails when the Dockerfile's PNPM_VERSION differs from the
+// pnpm pin in mise.toml. The image must read the lock file with the pnpm that wrote it.
+func TestDockerfilePnpmMatchesMise(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile(dockerfilePath)
+	if err != nil {
+		t.Fatalf("read Dockerfile: %v", err)
+	}
+	arg := dockerfilePnpmArg.FindSubmatch(raw)
+	if arg == nil {
+		t.Fatal("Dockerfile has no 'ARG PNPM_VERSION=<version>' line")
+	}
+	if got, pin := string(arg[1]), misePnpm(t); got != pin {
+		t.Fatalf("Dockerfile PNPM_VERSION is %s, mise.toml pins %s: they move together", got, pin)
+	}
+	if !strings.Contains(string(raw), "pnpm@${PNPM_VERSION}") {
+		t.Fatal("Dockerfile installs pnpm without 'pnpm@${PNPM_VERSION}', want the PNPM_VERSION argument")
+	}
+}
+
+// TestRenovateReadsDockerfilePnpm fails when no regex custom manager of renovate.json
+// extracts the npm datasource, the name pnpm and the mise.toml version from the Dockerfile's
+// PNPM_VERSION argument. Renovate's named group syntax, (?<name>...), is also Go's.
+func TestRenovateReadsDockerfilePnpm(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile(dockerfilePath)
+	if err != nil {
+		t.Fatalf("read Dockerfile: %v", err)
+	}
+	pin := misePnpm(t)
+
+	for _, manager := range readRenovateConfig(t).CustomManagers {
+		if manager.CustomType != "regex" || !slices.Contains(manager.ManagerFilePatterns, "/^Dockerfile$/") {
+			continue
+		}
+		for _, expr := range manager.MatchStrings {
+			re, err := regexp.Compile(expr)
+			if err != nil {
+				t.Fatalf("matchStrings %q does not compile: %v", expr, err)
+			}
+			match := re.FindStringSubmatch(string(raw))
+			if match == nil {
+				continue
+			}
+			named := map[string]string{}
+			for i, name := range re.SubexpNames() {
+				if name != "" {
+					named[name] = match[i]
+				}
+			}
+			if named["datasource"] != "npm" || named["depName"] != "pnpm" || named["currentValue"] != pin {
+				t.Fatalf("Dockerfile manager extracts %v, want datasource npm, depName pnpm, version %s", named, pin)
+			}
+			return
+		}
+	}
+
+	t.Fatal("no regex custom manager of renovate.json matches the Dockerfile's PNPM_VERSION argument")
+}
+
 // TestRenovateGroupsPnpmPins fails when renovate.json has no rule that groups the pnpm pin
-// of mise.toml with the govue rule's constraints.pnpm. Without the group a pnpm bump of
-// mise.toml alone breaks TestRenovateGovueConstraintMatchesMise.
+// of mise.toml with the Dockerfile argument and the govue rule's constraints.pnpm. Without
+// the group a pnpm bump of mise.toml alone breaks the tests of those pins.
 func TestRenovateGroupsPnpmPins(t *testing.T) {
 	t.Parallel()
 
@@ -163,7 +234,7 @@ func TestRenovateGroupsPnpmPins(t *testing.T) {
 		if !slices.Contains(rule.MatchPackageNames, "pnpm") {
 			continue
 		}
-		for _, manager := range []string{"mise", "renovate-config"} {
+		for _, manager := range []string{"mise", "custom.regex", "renovate-config"} {
 			if !slices.Contains(rule.MatchManagers, manager) {
 				t.Fatalf("the pnpm rule matches managers %v, want %q among them", rule.MatchManagers, manager)
 			}
@@ -201,4 +272,27 @@ func TestRenovateGovueConstraintMatchesMise(t *testing.T) {
 	}
 
 	t.Fatal("renovate.json has no package rule for govue")
+}
+
+// TestRenovateHoldsTypescriptBelowSeven fails when renovate.json loses the rule that keeps
+// TypeScript below 7, or changes its range, or drops the description that names when to
+// remove it. typescript-eslint and vue-tsc do not support 7 yet, so a 7.0 pull request
+// would fail on import.
+func TestRenovateHoldsTypescriptBelowSeven(t *testing.T) {
+	t.Parallel()
+
+	for _, rule := range readRenovateConfig(t).PackageRules {
+		if !slices.Contains(rule.MatchPackageNames, "typescript") {
+			continue
+		}
+		if rule.AllowedVersions != "<7" {
+			t.Fatalf("the typescript rule allows %q, want %q", rule.AllowedVersions, "<7")
+		}
+		if !strings.Contains(rule.Description, "Remove this rule when") {
+			t.Fatalf("the typescript rule's description %q does not name the condition to remove it", rule.Description)
+		}
+		return
+	}
+
+	t.Fatal("renovate.json has no package rule for typescript")
 }
