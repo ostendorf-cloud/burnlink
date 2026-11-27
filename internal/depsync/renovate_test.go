@@ -153,9 +153,77 @@ func TestRenovateManagerReadsGovueSpecifier(t *testing.T) {
 	t.Fatal("renovate.json has no regex custom manager for ostendorf-cloud/govue")
 }
 
+// dockerfilePath is the Dockerfile, relative to this package.
+const dockerfilePath = "../../Dockerfile"
+
+// dockerfilePnpmArg matches the PNPM_VERSION argument of the Dockerfile.
+var dockerfilePnpmArg = regexp.MustCompile(`(?m)^ARG PNPM_VERSION=(\S+)$`)
+
+// TestDockerfilePnpmMatchesMise fails when the Dockerfile's PNPM_VERSION differs from the
+// pnpm pin in mise.toml. The image must read the lock file with the pnpm that wrote it.
+func TestDockerfilePnpmMatchesMise(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile(dockerfilePath)
+	if err != nil {
+		t.Fatalf("read Dockerfile: %v", err)
+	}
+	arg := dockerfilePnpmArg.FindSubmatch(raw)
+	if arg == nil {
+		t.Fatal("Dockerfile has no 'ARG PNPM_VERSION=<version>' line")
+	}
+	if got, pin := string(arg[1]), misePnpm(t); got != pin {
+		t.Fatalf("Dockerfile PNPM_VERSION is %s, mise.toml pins %s: they move together", got, pin)
+	}
+	if regexp.MustCompile(`corepack prepare pnpm@\d`).Match(raw) {
+		t.Fatal("Dockerfile pins pnpm as a literal in corepack prepare, want the PNPM_VERSION argument")
+	}
+}
+
+// TestRenovateReadsDockerfilePnpm fails when no regex custom manager of renovate.json
+// extracts the npm datasource, the name pnpm and the mise.toml version from the Dockerfile's
+// PNPM_VERSION argument. Renovate's named group syntax, (?<name>...), is also Go's.
+func TestRenovateReadsDockerfilePnpm(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile(dockerfilePath)
+	if err != nil {
+		t.Fatalf("read Dockerfile: %v", err)
+	}
+	pin := misePnpm(t)
+
+	for _, manager := range readRenovateConfig(t).CustomManagers {
+		if manager.CustomType != "regex" || !slices.Contains(manager.ManagerFilePatterns, "/^Dockerfile$/") {
+			continue
+		}
+		for _, expr := range manager.MatchStrings {
+			re, err := regexp.Compile(expr)
+			if err != nil {
+				t.Fatalf("matchStrings %q does not compile: %v", expr, err)
+			}
+			match := re.FindStringSubmatch(string(raw))
+			if match == nil {
+				continue
+			}
+			named := map[string]string{}
+			for i, name := range re.SubexpNames() {
+				if name != "" {
+					named[name] = match[i]
+				}
+			}
+			if named["datasource"] != "npm" || named["depName"] != "pnpm" || named["currentValue"] != pin {
+				t.Fatalf("Dockerfile manager extracts %v, want datasource npm, depName pnpm, version %s", named, pin)
+			}
+			return
+		}
+	}
+
+	t.Fatal("no regex custom manager of renovate.json matches the Dockerfile's PNPM_VERSION argument")
+}
+
 // TestRenovateGroupsPnpmPins fails when renovate.json has no rule that groups the pnpm pin
-// of mise.toml with the govue rule's constraints.pnpm. Without the group a pnpm bump of
-// mise.toml alone breaks TestRenovateGovueConstraintMatchesMise.
+// of mise.toml with the Dockerfile argument and the govue rule's constraints.pnpm. Without
+// the group a pnpm bump of mise.toml alone breaks the tests of those pins.
 func TestRenovateGroupsPnpmPins(t *testing.T) {
 	t.Parallel()
 
@@ -163,7 +231,7 @@ func TestRenovateGroupsPnpmPins(t *testing.T) {
 		if !slices.Contains(rule.MatchPackageNames, "pnpm") {
 			continue
 		}
-		for _, manager := range []string{"mise", "renovate-config"} {
+		for _, manager := range []string{"mise", "custom.regex", "renovate-config"} {
 			if !slices.Contains(rule.MatchManagers, manager) {
 				t.Fatalf("the pnpm rule matches managers %v, want %q among them", rule.MatchManagers, manager)
 			}
