@@ -464,6 +464,58 @@ describe('share and reveal', () => {
     expect(storeSecret).not.toHaveBeenCalled()
   })
 
+  it('says where the address is entered that the server stores and learns it', () => {
+    render(ShareSecret)
+    const field = screen.getByLabelText(/Notify me when it is opened/)
+    expect(field).toHaveAttribute('type', 'url')
+    // The notice is the field's own description, so it is read with the field.
+    const description = field.getAttribute('aria-describedby')
+    expect(description).toBeTruthy()
+    const text = description
+      ?.split(' ')
+      .map((id) => document.getElementById(id)?.textContent ?? '')
+      .join(' ')
+    expect(text).toMatch(/server stores this address/)
+    expect(text).toMatch(/learns it/)
+    expect(text).toMatch(/never the secret/)
+    expect(text).toMatch(/not guaranteed/)
+  })
+
+  it('sends the webhook address only when one was typed, and forgets it afterwards', async () => {
+    render(ShareSecret)
+    await userEvent.type(screen.getByPlaceholderText('Type the secret here'), 'hi')
+    await userEvent.type(
+      screen.getByLabelText(/Notify me when it is opened/),
+      ' https://hooks.example.com/x ',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Create link' }))
+    await screen.findByLabelText('Secret link')
+
+    expect(vi.mocked(storeSecret).mock.calls[0][3]).toBe('https://hooks.example.com/x')
+    expect(screen.getByLabelText(/Notify me when it is opened/)).toHaveValue('')
+    expect(screen.getByText(/call your webhook once/)).toBeVisible()
+  })
+
+  it('sends no webhook address by default', async () => {
+    await share('hi')
+    expect(vi.mocked(storeSecret).mock.calls[0][3]).toBe('')
+  })
+
+  it('explains a refused webhook address without repeating it', async () => {
+    vi.mocked(storeSecret).mockRejectedValueOnce(
+      new ApiError({ code: 'invalid_argument', message: 'bad', status: 400 }),
+    )
+    render(ShareSecret)
+    await userEvent.type(screen.getByPlaceholderText('Type the secret here'), 'hi')
+    await userEvent.type(screen.getByLabelText(/Notify me when it is opened/), 'http://10.0.0.1/x')
+    await userEvent.click(screen.getByRole('button', { name: 'Create link' }))
+
+    const message = await screen.findByText(/notification address was not accepted/)
+    expect(message).toBeVisible()
+    expect(message.textContent).not.toContain('10.0.0.1')
+    expect(screen.queryByTestId('secret-link')).not.toBeInTheDocument()
+  })
+
   it('shows a refusal from the server as a message, not a link', async () => {
     vi.mocked(storeSecret).mockRejectedValueOnce(
       new ApiError({ code: 'too_many_requests', message: 'slow down', status: 429 }),

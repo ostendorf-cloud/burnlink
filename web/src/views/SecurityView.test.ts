@@ -39,6 +39,20 @@ describe('SecurityView', () => {
     expect(counting).toHaveTextContent(/never receives a key or a plaintext/i)
   })
 
+  it('says that a webhook target is stored, learned, and not guaranteed', () => {
+    render(SecurityView)
+
+    const notification = screen.getByTestId('notification')
+    expect(notification).toHaveTextContent(/in plain text/i)
+    expect(notification).toHaveTextContent(/learns the address/i)
+    expect(notification).toHaveTextContent(/never the secret/i)
+    expect(notification).toHaveTextContent(/port 443/i)
+    expect(notification).toHaveTextContent(/a notification can be lost/i)
+    expect(screen.getByTestId('status')).toHaveTextContent(
+      /notification by mail does not exist yet/i,
+    )
+  })
+
   it('names the key fragment and the one time read', () => {
     render(SecurityView)
 

@@ -27,8 +27,12 @@ const iterations = PBKDF2_ITERATIONS.toLocaleString('en-US').replace(/,/g, ' ')
         <p>
           Not running yet: the request link, a link you publish so that someone can send you a
           secret back. Its pages and its server endpoints are written, but the running server does
-          not serve those endpoints yet, so it cannot be used today. A command line client and a
-          notification when a link was opened do not exist either.
+          not serve those endpoints yet, so it cannot be used today. A command line client does not
+          exist either.
+        </p>
+        <p>
+          A notification when a link was opened runs as an option: a webhook. A notification by mail
+          does not exist yet.
         </p>
       </div>
     </GovueCard>
@@ -45,6 +49,18 @@ const iterations = PBKDF2_ITERATIONS.toLocaleString('en-US').replace(/,/g, ' ')
             and take payloads up to 1 MiB, both defaults that may change.
           </dd>
         </div>
+        <div class="flex flex-col gap-1" data-testid="notification">
+          <dt class="text-sm font-medium text-text">If you ask for a notification</dt>
+          <dd class="text-base text-text-muted">
+            The webhook address you typed, in plain text, until the link is opened or expires, and
+            so it learns the address and that you want to know. The server cannot read the secret
+            either way. When the link is opened it sends one request to that address with the id of
+            the link and the time, never the secret. It refuses an address that is not https on port
+            443, that points to a private or internal network, or that redirects elsewhere. It tries
+            three times at most and gives up quietly: a notification can be lost. The address
+            belongs to a third party's service if you chose one, and that service sees the request.
+          </dd>
+        </div>
         <div class="flex flex-col gap-1">
           <dt class="text-sm font-medium text-text">For a request link it also holds</dt>
           <dd class="text-base text-text-muted">
@@ -59,7 +75,8 @@ const iterations = PBKDF2_ITERATIONS.toLocaleString('en-US').replace(/,/g, ' ')
           <dd class="text-base text-text-muted">
             The address a request arrives from. Submissions to a request link are rate limited per
             link and per address, and the address is also in the access log. When the owner opens
-            the link, the browser sends the value that hash is checked against.
+            the link, the browser sends the value that hash is checked against. When a secret is
+            opened, the time, which it uses for the notification if you asked for one.
           </dd>
         </div>
         <div class="flex flex-col gap-1">

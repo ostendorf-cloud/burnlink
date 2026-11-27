@@ -24,16 +24,23 @@ export function getConfig(client: ApiClient): Promise<SecretConfig> {
   return client.get<SecretConfig>('/config')
 }
 
-/** storeSecret uploads a payload and returns the id the server chose. */
+/**
+ * storeSecret uploads a payload and returns the id the server chose. A
+ * notifyUrl is the optional webhook the server calls once when the secret is
+ * opened. It is the one plain text value besides the id that the server
+ * stores and so learns, and it is sent only when the sender typed one.
+ */
 export async function storeSecret(
   client: ApiClient,
   payload: Bytes,
   lifetimeSeconds?: number,
+  notifyUrl?: string,
 ): Promise<StoredSecret> {
-  const body: { ciphertext: string; lifetimeSeconds?: number } = {
+  const body: { ciphertext: string; lifetimeSeconds?: number; notifyUrl?: string } = {
     ciphertext: encodeBase64(payload),
   }
   if (lifetimeSeconds !== undefined) body.lifetimeSeconds = lifetimeSeconds
+  if (notifyUrl) body.notifyUrl = notifyUrl
   const resp = await client.post<{ id: string; expiresAt: string }>('/secrets', body)
   return { id: resp.id, expiresAt: new Date(resp.expiresAt) }
 }
