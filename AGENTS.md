@@ -23,8 +23,10 @@ The global baseline already applies here and is not repeated below.
 - `internal/store` defines `Store`, the small key/value contract (`SET NX PX`, a plain `Get`, and
   `GETDEL`) every handler that needs persistence is written against; `internal/store/memstore` is
   an in-process implementation for tests only, never wired into `cmd/burnlink`.
-  `store.Secrets` (`Put`, `Take`, `Exists`, `Ping`) is the one time secret API over a
-  `store.Backend`. `Exists` is a plain `GET`, which leaves the TTL alone. It has two sentinels:
+  `store.Secrets` (`Put`, `Take`, `Exists`, `PutTarget`, `TakeTarget`, `Ping`) is the one time
+  secret API over a `store.Backend`. `Exists` is a plain `GET`, which leaves the TTL alone.
+  `PutTarget` and `TakeTarget` keep a webhook target under `notify:<id>` with the secret's TTL.
+  It has two sentinels:
   `ErrExists`, and `ErrNotFound` for expired, taken and never existed alike.
   `internal/store/redisstore` is the production client (go-redis), wired into `cmd/burnlink`
   through readiness. Size limit, id validation and lifetime choice belong to the API layer.
@@ -35,6 +37,13 @@ The global baseline already applies here and is not repeated below.
   will not serve gets one fixed 404, see "API surface" in `docs/concepts/burnlink.md`. It uses
   govue's `ratelimit`, `clientip`, `csrf` and `api`, and `internal/buildinfo` for the version.
   `internal/config` also loads `SECRET_*` and `RATE_LIMIT_*`, none of them secret shaped.
+- `internal/notify` sends the optional redeem webhook (`notifyUrl`) to an untrusted destination.
+  `Validate` checks it at store time, `guardControl` checks the resolved address at connect time
+  (blocked ranges: `guard.go` and "Pickup notification" in `docs/concepts/burnlink.md`). Redirects
+  are never followed, no proxy, the body is `id` and `redeemedAt` only. Delivery is asynchronous
+  and never blocks or undoes a redemption. Retry: 3 attempts, 5 s each, 20 s total, backoff 1 s
+  then 4 s, only 5xx, 429, 408 and transport errors retry, at most 32 in flight, response read
+  to 4 KiB. No delivery guarantee. A change here changes `PrivacyText.vue` and `SecurityView.vue`.
 - Page views are counted by govue's `analytics`, wired in `cmd/burnlink` directly around the mux
   (innermost: it reads the route pattern the mux sets, which `RequestID` and the security
   middleware would hide). `UMAMI_URL` and `UMAMI_WEBSITE_ID` come from
@@ -122,8 +131,7 @@ exist, and so does the page that encrypts in the browser, calls the endpoints an
 secret once. Left out, tracked as later milestones:
 
 - A CLI client: sending a secret from a terminal with the same crypto the page uses.
-- A pickup notification: a sender optionally leaves a webhook or a mail address and learns when
-  their link was redeemed, with the server learning nothing about the secret's content either way.
+- A pickup notification by mail. The webhook variant exists, see `internal/notify`.
 
 The request-link feature, the reverse direction where an owner publishes a link and a stranger
 seals a secret back to it, is implemented: the crypto, `internal/webapp/requestlink`'s four
