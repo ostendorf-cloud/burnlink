@@ -38,6 +38,8 @@ func newTestHandler(t *testing.T) (*Handler, *time.Time) {
 	// rate limit. TestSubmitIsRateLimitedPerLinkAndAddress installs its own
 	// tight limiter instead of relying on this default.
 	h.SubmitLimiter = ratelimit.New(100, time.Minute, 100)
+	h.LookupLimiter = ratelimit.New(100, time.Minute, 100)
+	h.CreateLimiter = ratelimit.New(100, time.Minute, 100)
 	return h, &now
 }
 
@@ -473,6 +475,199 @@ func TestOpenRefusesAnUnknownLink(t *testing.T) {
 	})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, body = %s, want %d", rec.Code, rec.Body, http.StatusNotFound)
+	}
+}
+
+func openAs(t *testing.T, mux *http.ServeMux, id string, authValue []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	return doJSON(t, mux, "/api/v1/request-links/"+id+"/open", openRequest{
+		OwnerAuth: base64.StdEncoding.EncodeToString(authValue),
+	})
+}
+
+func TestOpenFreesSlotsForLaterSubmissions(t *testing.T) {
+	t.Parallel()
+
+	h, _ := newTestHandler(t)
+	h.MaxConcurrentSubmissions = 1
+	mux := newMux(h)
+	authValue, authHash := ownerAuth(3)
+	link := createLink(t, mux, authHash)
+
+	if rec := submitPayload(t, mux, link.ID, []byte("one")); rec.Code != http.StatusNoContent {
+		t.Fatalf("first submission status = %d, want %d", rec.Code, http.StatusNoContent)
+	}
+	if rec := submitPayload(t, mux, link.ID, []byte("two")); rec.Code != http.StatusConflict {
+		t.Fatalf("submission to a full link status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+	if rec := openAs(t, mux, link.ID, authValue); rec.Code != http.StatusOK {
+		t.Fatalf("open status = %d, body = %s, want %d", rec.Code, rec.Body, http.StatusOK)
+	}
+	// The slot the open call freed is reused: the cap is on submissions
+	// waiting at once, not a lifetime total.
+	if rec := submitPayload(t, mux, link.ID, []byte("three")); rec.Code != http.StatusNoContent {
+		t.Fatalf("submission after open status = %d, body = %s, want %d", rec.Code, rec.Body, http.StatusNoContent)
+	}
+	rec := openAs(t, mux, link.ID, authValue)
+	var resp openResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode open response: %v", err)
+	}
+	if len(resp.Submissions) != 1 {
+		t.Fatalf("second open returned %d submissions, want 1", len(resp.Submissions))
+	}
+	if got, _ := base64.StdEncoding.DecodeString(resp.Submissions[0]); string(got) != "three" {
+		t.Errorf("second open returned %q, want %q", got, "three")
+	}
+}
+
+func TestOpenRefusesAnExpiredLink(t *testing.T) {
+	t.Parallel()
+
+	h, now := newTestHandler(t)
+	mux := newMux(h)
+	authValue, authHash := ownerAuth(1)
+	link := createLink(t, mux, authHash)
+	if rec := submitPayload(t, mux, link.ID, []byte("x")); rec.Code != http.StatusNoContent {
+		t.Fatalf("submission status = %d, want %d", rec.Code, http.StatusNoContent)
+	}
+
+	*now = now.Add(h.Lifetime + time.Second)
+
+	rec := openAs(t, mux, link.ID, authValue)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, body = %s, want %d", rec.Code, rec.Body, http.StatusNotFound)
+	}
+}
+
+func TestSubmitAcceptsAPayloadOfExactlyTheLimit(t *testing.T) {
+	t.Parallel()
+
+	h, _ := newTestHandler(t)
+	mux := newMux(h)
+	_, authHash := ownerAuth(1)
+	link := createLink(t, mux, authHash)
+
+	exact := bytes.Repeat([]byte{0x41}, h.MaxSubmissionBytes)
+	rec := submitPayload(t, mux, link.ID, exact)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, body = %s, want %d", rec.Code, rec.Body, http.StatusNoContent)
+	}
+}
+
+func TestCreateIsRateLimitedPerAddress(t *testing.T) {
+	t.Parallel()
+
+	h, _ := newTestHandler(t)
+	h.CreateLimiter = ratelimit.New(1, time.Minute, 100)
+	mux := newMux(h)
+	_, authHash := ownerAuth(1)
+	body, err := json.Marshal(createRequest{OwnerAuthHash: base64.StdEncoding.EncodeToString(authHash)})
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	create := func(remoteAddr string) *httptest.ResponseRecorder {
+		req := httptest.NewRequestWithContext(t.Context(), "POST", "/api/v1/request-links", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = remoteAddr
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := create("203.0.113.5:1"); rec.Code != http.StatusCreated {
+		t.Fatalf("first create status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+	if rec := create("203.0.113.5:2"); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("second create from the same address status = %d, want %d", rec.Code, http.StatusTooManyRequests)
+	}
+	if rec := create("198.51.100.9:1"); rec.Code != http.StatusCreated {
+		t.Fatalf("create from a different address status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+}
+
+func TestOpenIsRateLimitedPerLinkAndAddress(t *testing.T) {
+	t.Parallel()
+
+	h, _ := newTestHandler(t)
+	h.LookupLimiter = ratelimit.New(1, time.Minute, 100)
+	mux := newMux(h)
+	authValue, authHash := ownerAuth(1)
+	link := createLink(t, mux, authHash)
+	body, err := json.Marshal(openRequest{OwnerAuth: base64.StdEncoding.EncodeToString(authValue)})
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	open := func(remoteAddr string) *httptest.ResponseRecorder {
+		req := httptest.NewRequestWithContext(t.Context(), "POST", "/api/v1/request-links/"+link.ID+"/open", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = remoteAddr
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := open("203.0.113.5:1"); rec.Code != http.StatusOK {
+		t.Fatalf("first open status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	rec := open("203.0.113.5:2")
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("second open from the same address status = %d, want %d", rec.Code, http.StatusTooManyRequests)
+	}
+	if rec.Header().Get("Retry-After") == "" {
+		t.Error("Retry-After header is empty on a 429")
+	}
+	if rec := open("198.51.100.9:1"); rec.Code != http.StatusOK {
+		t.Fatalf("open from a different address status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func getInfo(t *testing.T, mux *http.ServeMux, id string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/request-links/"+id, nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestInfoReturnsTheLimitsOfALink(t *testing.T) {
+	t.Parallel()
+
+	h, now := newTestHandler(t)
+	mux := newMux(h)
+	_, authHash := ownerAuth(1)
+	link := createLink(t, mux, authHash)
+
+	rec := getInfo(t, mux, link.ID)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s, want %d", rec.Code, rec.Body, http.StatusOK)
+	}
+	var resp infoResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode info response: %v", err)
+	}
+	if resp.MaxSubmissionBytes != h.MaxSubmissionBytes {
+		t.Errorf("MaxSubmissionBytes = %d, want %d", resp.MaxSubmissionBytes, h.MaxSubmissionBytes)
+	}
+	if !resp.ExpiresAt.Equal(now.Add(h.Lifetime)) {
+		t.Errorf("ExpiresAt = %v, want %v", resp.ExpiresAt, now.Add(h.Lifetime))
+	}
+}
+
+func TestInfoRefusesAnUnknownOrExpiredLink(t *testing.T) {
+	t.Parallel()
+
+	h, now := newTestHandler(t)
+	mux := newMux(h)
+	_, authHash := ownerAuth(1)
+	link := createLink(t, mux, authHash)
+
+	if rec := getInfo(t, mux, "does-not-exist"); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown link status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+	*now = now.Add(h.Lifetime + time.Second)
+	if rec := getInfo(t, mux, link.ID); rec.Code != http.StatusNotFound {
+		t.Fatalf("expired link status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 

@@ -45,6 +45,21 @@ const (
 	// A placeholder default; see DefaultLifetime.
 	DefaultSubmitPer = 10 * time.Second
 
+	// DefaultLookupBurst is how many open or info calls one resolved client
+	// address may make to one request link before DefaultLookupPer starts
+	// refilling its budget. Larger than DefaultSubmitBurst: an owner checking
+	// again by hand is expected, a stranger flooding submissions is not. A
+	// placeholder default; see DefaultLifetime.
+	DefaultLookupBurst = 10
+	// DefaultLookupPer is the refill period DefaultLookupBurst spends over.
+	DefaultLookupPer = 6 * time.Second
+	// DefaultCreateBurst is how many request links one resolved client
+	// address may create before DefaultCreatePer starts refilling its
+	// budget. A placeholder default; see DefaultLifetime.
+	DefaultCreateBurst = 5
+	// DefaultCreatePer is the refill period DefaultCreateBurst spends over.
+	DefaultCreatePer = time.Minute
+
 	// idBytes is how many random bytes a request link's id carries, before
 	// base64url encoding.
 	idBytes = 16

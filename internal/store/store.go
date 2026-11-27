@@ -11,6 +11,13 @@
 // now because the request link's endpoints need something to call; they are
 // written against this interface so that milestone can implement it without
 // either endpoint's call sites changing.
+//
+// Known cost: there is no batch primitive, so the request link's open call
+// makes one GetDel round trip per slot (up to its concurrent submission
+// limit, 50 by default) and a submit against a full link makes up to as many
+// SetNX calls. Both are bounded and per address rate limited. A batch method
+// would change this interface and every implementation, so it is decided with
+// the wiring of the Redis client, against measured latency, not guessed here.
 package store
 
 import (
