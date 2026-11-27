@@ -16,7 +16,8 @@ import {
 
 import { apiClient } from '../lib/api-client'
 import type { Bytes, Content } from '../lib/crypto'
-import { openRequestLink, submitToRequestLink } from '../lib/request-link-api'
+import { getRequestLinkInfo, openRequestLink, submitToRequestLink } from '../lib/request-link-api'
+import { safeName } from '../lib/safe-name'
 import { MissingFragmentError, importOwnerPublicKeyFromFragment } from '../lib/request-link'
 import {
   UnsupportedBrowserError,
@@ -52,6 +53,29 @@ const text = ref('')
 const file = ref<File | null>(null)
 const submitting = ref(false)
 const opening = ref(false)
+// maxSubmissionBytes is the sealed size limit the link reports, shown to a
+// submitter before a file is chosen. It stays null when the lookup failed:
+// the form still works and the server enforces the limit either way.
+const maxSubmissionBytes = ref<number | null>(null)
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1 << 20) return `${(bytes / (1 << 20)).toFixed(1).replace(/\.0$/, '')} MiB`
+  if (bytes >= 1 << 10) return `${(bytes / (1 << 10)).toFixed(1).replace(/\.0$/, '')} KiB`
+  return `${bytes} bytes`
+}
+
+// saveFile hands a received file to the browser's own save dialog. The data
+// is already in this browser's storage, so nothing here touches the network.
+// The type is neutral, so the browser never renders what a stranger sent.
+function saveFile(submission: Extract<Content, { type: 'file' }>) {
+  const url = URL.createObjectURL(new Blob([submission.data], { type: 'application/octet-stream' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = safeName(submission.name)
+  link.click()
+  // Some browsers cancel the download when the URL is revoked right after the click.
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
 
 function messageFor(err: unknown): string {
   if (err instanceof MissingFragmentError || err instanceof UnsupportedBrowserError) {
@@ -155,6 +179,11 @@ onMounted(async () => {
     const fragment = window.location.hash.slice(1)
     const { publicKeyRaw } = await importOwnerPublicKeyFromFragment(fragment)
     ownerPublicKeyRaw.value = publicKeyRaw
+    try {
+      maxSubmissionBytes.value = (await getRequestLinkInfo(apiClient, props.id)).maxSubmissionBytes
+    } catch {
+      // Not fatal: see maxSubmissionBytes.
+    }
     mode.value = 'submit'
   } catch (err) {
     errorMessage.value = messageFor(err)
@@ -211,6 +240,10 @@ function onFileChange(event: Event) {
         This secret is sealed in your browser before it ever leaves it. The server only ever sees
         the encrypted result, and nothing here identifies you to the owner.
       </p>
+      <p v-if="maxSubmissionBytes !== null" class="text-text-muted" data-testid="size-limit">
+        The sealed secret, text or file, may be at most {{ formatBytes(maxSubmissionBytes) }}.
+        Sealing adds a little overhead, so a file just under this size may be refused.
+      </p>
       <GovueErrorState
         v-if="errorMessage"
         title="Could not send this secret"
@@ -253,7 +286,7 @@ function onFileChange(event: Event) {
       <GovueEmptyState
         v-if="submissions.length === 0"
         title="Nothing waiting"
-        description="Every submission that had arrived is already shown below; checking again looks for anything new."
+        description="No submission has arrived yet. Checking again looks for anything new."
       />
       <ul v-else class="flex flex-col gap-3">
         <li
@@ -264,9 +297,12 @@ function onFileChange(event: Event) {
           <p v-if="submission.type === 'text'" class="whitespace-pre-wrap text-text">
             {{ submission.text }}
           </p>
-          <p v-else class="text-text">
-            {{ submission.name }} ({{ submission.mime || 'unknown type' }})
-          </p>
+          <div v-else class="flex items-center justify-between gap-3">
+            <p class="text-text">{{ submission.name }} ({{ submission.mime || 'unknown type' }})</p>
+            <GovueButton variant="secondary" @click="saveFile(submission)"
+              >Save {{ safeName(submission.name) }}</GovueButton
+            >
+          </div>
         </li>
       </ul>
     </GovueCard>

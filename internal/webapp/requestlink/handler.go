@@ -46,6 +46,15 @@ type Handler struct {
 	// so one abusive sender cannot exhaust another sender's share of the
 	// same link; see submitLimitKey.
 	SubmitLimiter *ratelimit.Limiter
+	// LookupLimiter is the token bucket an owner open or an info call to one
+	// link from one resolved address draws from, keyed like SubmitLimiter.
+	// It is drawn before the store is read. The key carries the id, so a
+	// caller that varies the id gets a fresh bucket and a read each time.
+	LookupLimiter *ratelimit.Limiter
+	// CreateLimiter is the token bucket a link creation from one resolved
+	// address draws from. There is no link id yet, so it is keyed by the
+	// address alone.
+	CreateLimiter *ratelimit.Limiter
 
 	Lifetime           time.Duration
 	MaxSubmissionBytes int
@@ -74,6 +83,8 @@ func NewHandler(s store.Store, trustedProxies []netip.Prefix) *Handler {
 		Now:                      time.Now,
 		ClientIP:                 clientip.NewResolver(trustedProxies),
 		SubmitLimiter:            ratelimit.New(DefaultSubmitBurst, DefaultSubmitPer, 10_000),
+		LookupLimiter:            ratelimit.New(DefaultLookupBurst, DefaultLookupPer, 10_000),
+		CreateLimiter:            ratelimit.New(DefaultCreateBurst, DefaultCreatePer, 10_000),
 		Lifetime:                 DefaultLifetime,
 		MaxSubmissionBytes:       DefaultMaxSubmissionBytes,
 		MaxConcurrentSubmissions: DefaultMaxConcurrentSubmissions,
@@ -85,6 +96,7 @@ func NewHandler(s store.Store, trustedProxies []netip.Prefix) *Handler {
 // service's first API routes to pick a different one.
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/request-links", api.Handle(h.create))
+	mux.Handle("GET /api/v1/request-links/{id}", api.Handle(h.info))
 	mux.Handle("POST /api/v1/request-links/{id}/submissions", api.Handle(h.submit))
 	mux.Handle("POST /api/v1/request-links/{id}/open", api.Handle(h.open))
 }
@@ -113,6 +125,10 @@ type createResponse struct {
 // owner's public key never reaches this handler at all: docs/adr/0003
 // settles that it travels only in the link's own fragment.
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
+	if allowed, wait := h.CreateLimiter.Take(clientip.Key(h.ClientIP.Resolve(r))); !allowed {
+		return api.TooManyRequests(wait)
+	}
+
 	var req createRequest
 	if err := api.Decode(r, &req); err != nil {
 		return err
@@ -214,6 +230,34 @@ func (h *Handler) submit(w http.ResponseWriter, r *http.Request) error {
 	return api.Conflict("this request link already holds as many submissions waiting as it accepts at once")
 }
 
+type infoResponse struct {
+	ExpiresAt          time.Time `json:"expiresAt"`
+	MaxSubmissionBytes int       `json:"maxSubmissionBytes"`
+}
+
+// info returns the limits a submitter needs before choosing what to send: the
+// largest sealed payload and the link's expiry. It reveals nothing submit
+// would not already reveal to anyone holding the id.
+func (h *Handler) info(w http.ResponseWriter, r *http.Request) error {
+	id := r.PathValue("id")
+
+	if allowed, wait := h.LookupLimiter.Take(submitLimitKey(id, h.ClientIP.Resolve(r))); !allowed {
+		return api.TooManyRequests(wait)
+	}
+
+	metadata, found, err := h.getMetadata(r.Context(), id)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return api.NotFound("request link not found")
+	}
+	return api.Write(w, http.StatusOK, infoResponse{
+		ExpiresAt:          metadata.ExpiresAt,
+		MaxSubmissionBytes: metadata.MaxSubmissionBytes,
+	})
+}
+
 type openRequest struct {
 	// OwnerAuth is base64 standard encoding of the value only the holder of
 	// the owner's private key can derive; see Metadata.OwnerAuthHash.
@@ -229,17 +273,15 @@ type openResponse struct {
 // open returns and removes every submission currently waiting on the
 // request link id names. It is reachable by anyone who knows id, exactly
 // like the submit endpoint; what tells the owner's own call apart is
-// ownerAuth, which only the private key holder can reproduce. A wrong value
-// answers the same as an unknown link, so neither leaks which was wrong.
+// ownerAuth, which only the private key holder can reproduce. The body is
+// decoded before the link is looked up, so a well formed request with a wrong
+// value answers exactly like one for an unknown link; a malformed body is
+// refused the same way for both.
 func (h *Handler) open(w http.ResponseWriter, r *http.Request) error {
 	id := r.PathValue("id")
 
-	metadata, found, err := h.getMetadata(r.Context(), id)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return api.NotFound("request link not found")
+	if allowed, wait := h.LookupLimiter.Take(submitLimitKey(id, h.ClientIP.Resolve(r))); !allowed {
+		return api.TooManyRequests(wait)
 	}
 
 	var req openRequest
@@ -249,6 +291,14 @@ func (h *Handler) open(w http.ResponseWriter, r *http.Request) error {
 	ownerAuth, err := base64.StdEncoding.DecodeString(req.OwnerAuth)
 	if err != nil {
 		return api.Invalid("ownerAuth must be base64 encoded")
+	}
+
+	metadata, found, err := h.getMetadata(r.Context(), id)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return api.NotFound("request link not found")
 	}
 	if !ownerAuthMatches(ownerAuth, metadata.OwnerAuthHash) {
 		return api.NotFound("request link not found")
@@ -289,9 +339,9 @@ func (h *Handler) getMetadata(ctx context.Context, id string) (Metadata, bool, e
 	return metadata, true, nil
 }
 
-// submitLimitKey keys the rate limiter by link and by resolved address
-// together, so one abusive sender cannot exhaust another sender's share of
-// the same link's budget.
+// submitLimitKey keys a per link rate limiter (submit, open and info) by link
+// and by resolved address together, so one abusive sender cannot exhaust
+// another sender's share of the same link's budget.
 func submitLimitKey(id string, addr netip.Addr) string {
 	return id + "|" + clientip.Key(addr)
 }

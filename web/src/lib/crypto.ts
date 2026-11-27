@@ -26,7 +26,8 @@ const TAG_BYTES = 16
 // Fixed per payload version, never read from the payload, so a forged payload
 // cannot lower it.
 export const PBKDF2_ITERATIONS = 600000
-const HKDF_INFO = new TextEncoder().encode('burnlink.de v1 aes-256-gcm')
+// Exported so a test can derive a send flow key without repeating the string.
+export const HKDF_INFO = new TextEncoder().encode('burnlink.de v1 aes-256-gcm')
 // Plaintext is padded to a multiple of this, so the stored size does not
 // reveal the length of a short secret.
 const PAD_BLOCK = 256

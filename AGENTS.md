@@ -51,8 +51,11 @@ The global baseline already applies here and is not repeated below.
   `/terms` and no `/agb`. `main.ts` mounts the legal view when the path is a legal page, else
   `App`. A change to what the server stores, logs or counts changes `PrivacyText.vue` in the
   same commit.
-- `internal/webapp/requestlink` answers the request link's own endpoints: create a link, submit a
-  sealed payload to it, and open everything waiting for the owner. Written against
+- `internal/webapp/requestlink` answers the request link's own endpoints: create a link, read its
+  limits (`GET`, for the submit page), submit a sealed payload to it, and open everything waiting
+  for the owner. Each draws from a rate limiter keyed by the resolved client address, per link
+  for all but create. `MaxConcurrentSubmissions` caps submissions held at once, not a lifetime
+  total: an open call frees every slot. Written against
   `internal/store.Store`, not against `memstore` directly, so swapping in the real client changes
   no call site here.
 - `web/` is the Vue SPA, consuming govue's Vue package as a pnpm git dependency. There is still no
@@ -123,7 +126,7 @@ secret once. Left out, tracked as later milestones:
   their link was redeemed, with the server learning nothing about the secret's content either way.
 
 The request-link feature, the reverse direction where an owner publishes a link and a stranger
-seals a secret back to it, is implemented: the crypto, `internal/webapp/requestlink`'s three
+seals a secret back to it, is implemented: the crypto, `internal/webapp/requestlink`'s four
 endpoints, and the two views above. It is not yet reachable from the running binary:
 `cmd/burnlink`'s handler registers no routes under `internal/webapp/requestlink` because doing so
 needs a `store.Store` backed by something that survives a restart and is shared across replicas.

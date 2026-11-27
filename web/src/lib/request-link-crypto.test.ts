@@ -6,7 +6,7 @@
 // DOM access of its own.
 import { afterEach, expect, test } from 'vitest'
 
-import { DecryptError, type Content, type DecryptCode } from './crypto'
+import { DecryptError, HKDF_INFO, type Content, type DecryptCode } from './crypto'
 import {
   OWNER_PUBLIC_KEY_BYTES,
   SUBMISSION_VERSION,
@@ -117,7 +117,7 @@ test('a key derived for the send flow cannot open a submission', async () => {
       name: 'HKDF',
       hash: 'SHA-256',
       salt: new Uint8Array(0),
-      info: new TextEncoder().encode('burnlink.de v1 aes-256-gcm'),
+      info: HKDF_INFO,
     },
     sendFlowBase,
     { name: 'AES-GCM', length: 256 },

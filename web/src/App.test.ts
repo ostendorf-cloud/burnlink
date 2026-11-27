@@ -99,7 +99,7 @@ describe('App', () => {
     expect(await screen.findByText('This link could not be opened')).toBeVisible()
   })
 
-  it.each(['/s/%C3%28', '/r/%C3%28'])(
+  it.each(['/s/%C3%28', '/r/%C3%28', '/s/%', '/r/%'])(
     'shows the not found page, not a blank page, on the invalid escape %s',
     (path) => {
       window.history.pushState({}, '', path)

@@ -12,6 +12,7 @@ import RequestLinkView from './RequestLinkView.vue'
 vi.mock('../lib/request-link-api', () => ({
   submitToRequestLink: vi.fn().mockResolvedValue(undefined),
   openRequestLink: vi.fn(),
+  getRequestLinkInfo: vi.fn(),
 }))
 vi.mock('../lib/request-link-keys', () => ({
   hasOwnerKey: vi.fn(),
@@ -22,7 +23,7 @@ vi.mock('../lib/request-link-submissions', () => ({
   appendSubmissions: vi.fn(),
 }))
 
-import { openRequestLink, submitToRequestLink } from '../lib/request-link-api'
+import { getRequestLinkInfo, openRequestLink, submitToRequestLink } from '../lib/request-link-api'
 import { hasOwnerKey, loadOwnerKey } from '../lib/request-link-keys'
 import { appendSubmissions, loadSubmissions } from '../lib/request-link-submissions'
 
@@ -35,6 +36,9 @@ describe('RequestLinkView', () => {
     vi.mocked(hasOwnerKey).mockReset().mockResolvedValue(false)
     vi.mocked(loadOwnerKey).mockReset()
     vi.mocked(openRequestLink).mockReset()
+    vi.mocked(getRequestLinkInfo)
+      .mockReset()
+      .mockResolvedValue({ expiresAt: new Date(0), maxSubmissionBytes: 2 << 20 })
     vi.mocked(submitToRequestLink).mockReset().mockResolvedValue(undefined)
     vi.mocked(loadSubmissions).mockReset().mockResolvedValue([])
     vi.mocked(appendSubmissions)
@@ -72,6 +76,63 @@ describe('RequestLinkView', () => {
     render(RequestLinkView, { props: { id: 'abc' } })
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeVisible())
+  })
+
+  it('shows the size limit to a submitter before a file is chosen', async () => {
+    const owner = await generateOwnerKeyPair()
+    setLocation(encodeOwnerPublicKeyFragment(owner.publicKeyRaw))
+
+    render(RequestLinkView, { props: { id: 'abc' } })
+
+    await waitFor(() => expect(screen.getByTestId('size-limit')).toHaveTextContent('at most 2 MiB'))
+    expect(getRequestLinkInfo).toHaveBeenCalledWith(expect.anything(), 'abc')
+  })
+
+  it('still shows the submit form when the size limit cannot be read', async () => {
+    const owner = await generateOwnerKeyPair()
+    setLocation(encodeOwnerPublicKeyFragment(owner.publicKeyRaw))
+    vi.mocked(getRequestLinkInfo).mockRejectedValue(new Error('network error'))
+
+    render(RequestLinkView, { props: { id: 'abc' } })
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeVisible())
+    expect(screen.queryByTestId('size-limit')).not.toBeInTheDocument()
+  })
+
+  it('offers to save a received file to disk', async () => {
+    const owner = await generateOwnerKeyPair()
+    vi.mocked(hasOwnerKey).mockResolvedValue(true)
+    vi.mocked(loadOwnerKey).mockResolvedValue(owner)
+    vi.mocked(loadSubmissions).mockResolvedValue([
+      {
+        type: 'file',
+        name: '../report.pdf',
+        mime: 'application/pdf',
+        data: new Uint8Array([1, 2]),
+      },
+    ])
+    vi.mocked(openRequestLink).mockResolvedValue([])
+    const createObjectURL = vi.fn().mockReturnValue('blob:test')
+    const revokeObjectURL = vi.fn()
+    Object.assign(URL, { createObjectURL, revokeObjectURL })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    try {
+      render(RequestLinkView, { props: { id: 'abc' } })
+      const save = await screen.findByRole('button', { name: 'Save .._report.pdf' })
+      await userEvent.click(save)
+
+      expect(createObjectURL).toHaveBeenCalledTimes(1)
+      const blob = createObjectURL.mock.calls[0][0] as Blob
+      expect(blob.type).toBe('application/octet-stream')
+      expect(click).toHaveBeenCalledTimes(1)
+      expect(click.mock.contexts[0]).toHaveProperty('download', '.._report.pdf')
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:test')
+    } finally {
+      click.mockRestore()
+      Reflect.deleteProperty(URL, 'createObjectURL')
+      Reflect.deleteProperty(URL, 'revokeObjectURL')
+    }
   })
 
   it('seals and submits the typed text, then shows it was sent', async () => {
@@ -112,6 +173,7 @@ describe('RequestLinkView', () => {
     render(RequestLinkView, { props: { id: 'abc' } })
 
     await waitFor(() => expect(screen.getByText('Nothing waiting')).toBeVisible())
+    expect(screen.getByText(/No submission has arrived yet/)).toBeVisible()
   })
 
   it('saves a newly opened submission before showing it', async () => {

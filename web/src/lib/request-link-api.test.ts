@@ -5,12 +5,18 @@ import type { ApiClient } from '@ostendorf-cloud/govue'
 import { expect, test, vi } from 'vitest'
 
 import { encodeBase64 } from './crypto'
-import { createRequestLink, openRequestLink, submitToRequestLink } from './request-link-api'
+import {
+  createRequestLink,
+  getRequestLinkInfo,
+  openRequestLink,
+  submitToRequestLink,
+} from './request-link-api'
 
 function fakeClient(responses: Record<string, unknown>): ApiClient {
   const post = vi.fn((path: string) => Promise.resolve(responses[path]))
+  const get = vi.fn((path: string) => Promise.resolve(responses[path]))
   return {
-    get: vi.fn(),
+    get,
     post,
     put: vi.fn(),
     patch: vi.fn(),
@@ -68,6 +74,18 @@ test('openRequestLink sends the owner auth and decodes every returned submission
     ownerAuth: encodeBase64(ownerAuth),
   })
   expect(submissions).toEqual([a, b])
+})
+
+test('getRequestLinkInfo reads the limits from the link-specific path', async () => {
+  const expiresAt = '2026-02-01T00:00:00Z'
+  const client = fakeClient({
+    '/request-links/abc%20def': { expiresAt, maxSubmissionBytes: 2048 },
+  })
+
+  const info = await getRequestLinkInfo(client, 'abc def')
+
+  expect(client.get).toHaveBeenCalledWith('/request-links/abc%20def')
+  expect(info).toEqual({ expiresAt: new Date(expiresAt), maxSubmissionBytes: 2048 })
 })
 
 test('openRequestLink returns an empty list when nothing is waiting', async () => {
