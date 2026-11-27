@@ -73,7 +73,8 @@ function saveFile(submission: Extract<Content, { type: 'file' }>) {
   link.href = url
   link.download = safeName(submission.name)
   link.click()
-  URL.revokeObjectURL(url)
+  // Some browsers cancel the download when the URL is revoked right after the click.
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 function messageFor(err: unknown): string {

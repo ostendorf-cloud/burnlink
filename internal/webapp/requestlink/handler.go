@@ -48,7 +48,8 @@ type Handler struct {
 	SubmitLimiter *ratelimit.Limiter
 	// LookupLimiter is the token bucket an owner open or an info call to one
 	// link from one resolved address draws from, keyed like SubmitLimiter.
-	// It is drawn before the store is read, so an unknown id costs no read.
+	// It is drawn before the store is read. The key carries the id, so a
+	// caller that varies the id gets a fresh bucket and a read each time.
 	LookupLimiter *ratelimit.Limiter
 	// CreateLimiter is the token bucket a link creation from one resolved
 	// address draws from. There is no link id yet, so it is keyed by the
