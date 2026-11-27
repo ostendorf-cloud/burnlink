@@ -97,6 +97,12 @@ pnpm git dependency must always name the same tag. `task check:govue-version`
 (`internal/depsync`) enforces this; see that package's own comments for the full reasoning,
 including the pnpm/pnpm#12304 lockfile check `TestLockfilePinsGovueSubdirectory` exists for.
 
+Renovate proposes a govue release as one pull request, group `govue`. A regex manager in
+`renovate.json` reads the tag from `web/package.json`, because the npm manager skips that
+specifier. The shared `govue-lockfile` preset regenerates `web/pnpm-lock.yaml`. The rule's
+`constraints.pnpm` must equal the pnpm pin in `mise.toml`, and `internal/depsync` tests it. A
+`pnpm` group rule moves both pins in one pull request.
+
 ## Verify before committing
 
 ```sh
