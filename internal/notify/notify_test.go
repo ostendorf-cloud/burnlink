@@ -145,6 +145,12 @@ func TestDeliveryAndRetry(t *testing.T) {
 		{name: "not found is not retried", answers: []func(*http.Request) (*http.Response, error){status(404)}, to: target, wantReqs: 1, wantLog: "unexpected status"},
 		{name: "a redirect is refused, not followed", answers: []func(*http.Request) (*http.Response, error){redirect("https://169.254.169.254/latest"), status(200)}, to: target, wantReqs: 1, wantLog: "unexpected status"},
 		{name: "http is refused before any request", answers: []func(*http.Request) (*http.Response, error){status(200)}, to: "http://hooks.example.com/x", wantReqs: 0, wantLog: "invalid url"},
+		// A stored target that fails Validate is not delivered, whatever put it in the
+		// store: every store time check stays in force at delivery.
+		{name: "another port is refused before any request", answers: []func(*http.Request) (*http.Response, error){status(200)}, to: "https://hooks.example.com:8443/x", wantReqs: 0, wantLog: "invalid url"},
+		{name: "user information is refused before any request", answers: []func(*http.Request) (*http.Response, error){status(200)}, to: "https://user:pw@hooks.example.com/x", wantReqs: 0, wantLog: "invalid url"},
+		{name: "a fragment is refused before any request", answers: []func(*http.Request) (*http.Response, error){status(200)}, to: "https://hooks.example.com/x#f", wantReqs: 0, wantLog: "invalid url"},
+		{name: "a blocked address literal is refused before any request", answers: []func(*http.Request) (*http.Response, error){status(200)}, to: "https://10.0.0.1/x", wantReqs: 0, wantLog: "invalid url"},
 		{name: "unparsable url is refused", answers: []func(*http.Request) (*http.Response, error){status(200)}, to: "https://[::1", wantReqs: 0, wantLog: "invalid url"},
 	}
 	for _, tc := range cases {

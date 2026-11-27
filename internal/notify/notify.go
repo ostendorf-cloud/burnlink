@@ -22,7 +22,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/url"
 	"sync"
 	"time"
 )
@@ -184,11 +183,12 @@ func (n *Notifier) Close(ctx context.Context) error {
 // errPermanent marks a failure no retry can change.
 var errPermanent = errors.New("notify: permanent failure")
 
-// deliver sends body to target, with up to maxAttempts attempts.
+// deliver sends body to target, with up to maxAttempts attempts. The target
+// is checked again with Validate: it came out of the store, and every store
+// time check stays in force at delivery.
 func (n *Notifier) deliver(ctx context.Context, target string, body Body) error {
-	u, err := url.Parse(target)
-	if err != nil || u.Scheme != "https" {
-		return fmt.Errorf("%w: %w", errPermanent, ErrInvalidTarget)
+	if err := Validate(target); err != nil {
+		return fmt.Errorf("%w: %w", errPermanent, err)
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {

@@ -150,9 +150,60 @@ func TestDialerRefusesAResolvedPrivateAddress(t *testing.T) {
 	}
 }
 
-// The whole client, with the real guarded transport, against a server that
-// listens on loopback: the connection must never be made.
-func TestNotifierNeverReachesALoopbackServer(t *testing.T) {
+// The real guarded transport, asked for loopback on the one allowed port. No
+// listener exists: the hook refuses before any connect. A connect would fail
+// with "connection refused", not with ErrBlocked, so the error tells the two
+// apart. The literals cannot pass Validate, so this goes to the client
+// directly: it is the layer that stays when a name resolves to such an address.
+func TestGuardedTransportRefusesLoopbackOnPort443(t *testing.T) {
+	t.Parallel()
+
+	for _, to := range []string{"https://127.0.0.1/", "https://[::1]/", "https://localhost/"} {
+		t.Run(to, func(t *testing.T) {
+			t.Parallel()
+			n := New(Config{})
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, to, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := n.client.Do(req)
+			if err == nil {
+				_ = resp.Body.Close()
+				t.Fatalf("Do(%s) succeeded, want a refusal", to)
+			}
+			if !errors.Is(err, ErrBlocked) {
+				t.Errorf("Do(%s) error = %v, want ErrBlocked", to, err)
+			}
+		})
+	}
+}
+
+// The whole notifier with the real transport, for a name that passes Validate
+// and resolves to loopback: the refusal comes from the connect time guard.
+func TestNotifierRefusesANameThatResolvesToLoopback(t *testing.T) {
+	t.Parallel()
+
+	var logs strings.Builder
+	n := New(Config{
+		Logger: newTestLogger(&logs),
+		Sleep:  func(context.Context, time.Duration) error { return nil },
+	})
+	n.Notify(t.Context(), "id", time.Now(), "https://localhost/hook")
+	if err := n.Close(t.Context()); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if !strings.Contains(logs.String(), "destination not allowed") {
+		t.Errorf("log = %q, want the destination refusal", logs.String())
+	}
+	if strings.Contains(logs.String(), "localhost") {
+		t.Errorf("log names the destination: %q", logs.String())
+	}
+}
+
+// A server that listens on loopback on a random port: it is refused before
+// the request, by Validate, and the server never sees a connection. The
+// refusal at connect time is covered by the two tests above.
+func TestNotifierNeverReachesALoopbackServerOnAnotherPort(t *testing.T) {
 	t.Parallel()
 
 	var hits atomic.Int32
@@ -173,8 +224,8 @@ func TestNotifierNeverReachesALoopbackServer(t *testing.T) {
 	if got := hits.Load(); got != 0 {
 		t.Errorf("server received %d requests, want 0", got)
 	}
-	if !strings.Contains(logs.String(), "destination not allowed") {
-		t.Errorf("log = %q, want the destination refusal", logs.String())
+	if !strings.Contains(logs.String(), "invalid url") {
+		t.Errorf("log = %q, want the invalid url refusal", logs.String())
 	}
 	if strings.Contains(logs.String(), srv.URL) || strings.Contains(logs.String(), "127.0.0.1") {
 		t.Errorf("log names the destination: %q", logs.String())
