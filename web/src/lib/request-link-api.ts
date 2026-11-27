@@ -45,6 +45,23 @@ export async function createRequestLink(
   }
 }
 
+export interface RequestLinkInfo {
+  expiresAt: Date
+  /** maxSubmissionBytes bounds the sealed payload, so slightly more than the secret itself. */
+  maxSubmissionBytes: number
+}
+
+interface infoResponse {
+  expiresAt: string
+  maxSubmissionBytes: number
+}
+
+/** getRequestLinkInfo reads the limits a submitter needs before choosing what to send. */
+export async function getRequestLinkInfo(client: ApiClient, id: string): Promise<RequestLinkInfo> {
+  const resp = await client.get<infoResponse>(`/request-links/${encodeURIComponent(id)}`)
+  return { expiresAt: new Date(resp.expiresAt), maxSubmissionBytes: resp.maxSubmissionBytes }
+}
+
 /** submitToRequestLink sends one sealed submission to the request link id names. */
 export async function submitToRequestLink(
   client: ApiClient,
