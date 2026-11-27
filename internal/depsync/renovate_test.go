@@ -178,8 +178,8 @@ func TestDockerfilePnpmMatchesMise(t *testing.T) {
 	if got, pin := string(arg[1]), misePnpm(t); got != pin {
 		t.Fatalf("Dockerfile PNPM_VERSION is %s, mise.toml pins %s: they move together", got, pin)
 	}
-	if regexp.MustCompile(`corepack prepare pnpm@\d`).Match(raw) {
-		t.Fatal("Dockerfile pins pnpm as a literal in corepack prepare, want the PNPM_VERSION argument")
+	if !strings.Contains(string(raw), "pnpm@${PNPM_VERSION}") {
+		t.Fatal("Dockerfile installs pnpm without 'pnpm@${PNPM_VERSION}', want the PNPM_VERSION argument")
 	}
 }
 
