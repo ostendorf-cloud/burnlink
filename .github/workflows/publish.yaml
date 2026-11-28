@@ -195,3 +195,27 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: helm push "burnlink-${VERSION}.tgz" oci://ghcr.io/ostendorf-cloud/charts
+
+  # The CLI archives are attached to the release release-me already created.
+  # Nothing here depends on the image, so a failed image push does not hold
+  # back the binaries, and the other way round.
+  cli:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78  # v5.3.0
+        with:
+          install_args: go goreleaser
+          cache: false
+
+      - name: Build the archives and attach them to the release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: goreleaser release --clean

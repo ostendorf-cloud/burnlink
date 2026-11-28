@@ -1,0 +1,69 @@
+{
+  "about": "Golden vectors of payload format version 1. Both internal/payload and web/src/lib/crypto.ts decrypt every payload and, with salt and iv fixed, reproduce it byte for byte. The keys and passphrases protect nothing, they are public in this file. Regenerate the payloads with: go test ./internal/payload -run TestVectors -update",
+  "vectors": [
+    {
+      "name": "text without a passphrase",
+      "linkKey": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+      "passphrase": "",
+      "salt": "",
+      "iv": "c0c1c2c3c4c5c6c7c8c9cacb",
+      "content": {
+        "kind": "text",
+        "text": "correct horse battery staple ✓ äöü\n\t\"quoted\" <b>&</b>"
+      },
+      "payload": "AQDAwcLDxMXGx8jJysstMDXQw8TJV88vLZGqL8pS52mkkkaqQF7QYLJAMRAoGQiU5SCl27v/u19aZFQ2xQ3enybub6ffAE+u6y/d2Z5QyeW5vchrh0ftlevpusfX9EM7mhOwFekBHmwAeucJNDDDPVVGRqe6Xbjt1PcN/pIeRqLgM6VrkgMWKMZ79LX5tT+VdUyw10J12ZTgbejUf5kc4OHCVXFr4mpoJ6+z2gr20Fi/gVGyrev2sjGSOsca4MT7FA2UnUUfpy+7SmS4aUFrOfO0LlgIbCnn2LeVhtTITxup7hBeDCJ35C71wGVYM/4F/hMWvxiln2lCzttLJqMVex5i8yytJf7bm33osrk/cxKnLF+MZYvu1CKN2m0XiA=="
+    },
+    {
+      "name": "text across two padding blocks",
+      "linkKey": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+      "passphrase": "",
+      "salt": "",
+      "iv": "d0d1d2d3d4d5d6d7d8d9dadb",
+      "content": {
+        "kind": "text",
+        "text": "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog."
+      },
+      "payload": "AQDQ0dLT1NXW19jZ2ts0gwHeNw4jfL1AQOC3Vds6KPoP10YI7gaiDTBBCF/redj9RYv/JRSBipXBdyjBJQIWTkGH24sy5N7nGL50/GAcaGlzBGCo0BPtGVybQ370uv8XY5Y9QsYD46o8cVruyZSz32zRJo7Whb5l+epgwWXardDH+Fvdy4wACwKeW77yW+61GxojiL6TCXqKv5pNzfk9elSkEtSjy0WgrTs/kpr0ABhOjWVds4eyYXu4t7Xsvjirhh33PVVPb9Adibo2MfDS9IPagIKf4wOfFQfJmDZGhcG4ipacXSNZ9VXVem1mjquruKSw7YsSUuOyqlHqMlY7Q46rhbgu7PVW/2EuJN3Qscrr/MxoKDzokHb07prg/pyq84RuFjsyktkQRNCCvhgCQUUg4ctNnd00I8vkFqoYaCLy+3E33NdUxT+aVOCfh70bnvTWwW1FMOUe5IyRADAN5HRbWSPXvBKyTEWnaE1LLWbmir8MN9Hi2TDw4U9WDf2lkZook+nQYYOtfaCkcdoyxNE1qOve6CjDAZ58xTAKpn8KW1ibuh0+zgS0pK9NIcw+AHSXKCXLMqulLpAIJQfrazJGYYsIvRDUJvTieXetG5EczNhx5iBa9xoB/f7bXLceppwGDYVTXs11nqrengQKJQFfd/TFed03mX/Py1tQFwnxXaLki44Wif2v6AUbHvDexOvF4Latxbw2OLlGml8="
+    },
+    {
+      "name": "file without a passphrase",
+      "linkKey": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+      "passphrase": "",
+      "salt": "",
+      "iv": "e0e1e2e3e4e5e6e7e8e9eaeb",
+      "content": {
+        "kind": "file",
+        "name": "../id_ed25519",
+        "mime": "application/x-pem-file",
+        "data": "AAEC/v9/gA=="
+      },
+      "payload": "AQDg4eLj5OXm5+jp6uuMEZq1sAM8IlZGcDPB9IrRNkhvrapFpg0BJBEZVQcaAJsANwcds5P0+typbpCRpqabovrn0aNyw9zBhxJDg3WIgpVPh88AFSVgD1ux3Y3jjEA7D9Z0Ixnv0NQL/JwRW3exvPwr8jlCK53nHKdilUDu4A1qRZhbyTn55aeoLxMrkOtN0snCYXrB8D+TKKTM7N58UWGaNimSrm8lvXNrwQD3FDp7uki4w0/4AyVMHijpU22lRpFE7muVzWytOM6Xgo016/cZ5Qe70MJu6a7E0NQHflTD4mVgXu2A8zrWkqHehbuVSI1/BoTwLbq3/sNw9Pebblrf3YlWioAAPe//0XS1ziZzILL6WfRv/M/4bWLeNg=="
+    },
+    {
+      "name": "text with a passphrase",
+      "linkKey": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+      "passphrase": "tr0ub4dor&3",
+      "salt": "101112131415161718191a1b1c1d1e1f",
+      "iv": "f0f1f2f3f4f5f6f7f8f9fafb",
+      "content": {
+        "kind": "text",
+        "text": "a secret behind a passphrase"
+      },
+      "payload": "AQEQERITFBUWFxgZGhscHR4f8PHy8/T19vf4+fr7iKF2Q7sn1xGE5i7eZ/EsgTNoIRfLzTjfjj6Xm9snaq2PsfQz0GAfa+BCGQ8JAVUVvmKx+qRGvkfHaExBSujuDE0oS3V1PejOL/tDBH1SrRo5Uaj3lL0hNFeccsoDExtVGujS1VYTG1sq2bS11jaGCeTxn4zfsdvqYeoSonzCiuNPQq/cmNdKohX1YuRE+OsBCXkWdYyl1B8XAGV2YmD5Y5nJOowsAEIByB9a9rypTwwE1xfiAGjT6NAQh0jPzstcjCFtO1q5eTv4yIMBKj59gb3EkBS387F6wPHZk6PHn2X9H6Tlm/cKsT+hEsiLAo0dOsxPZXLiQKkicI/1UzXOFVTWQIJLzJAYH+U2pWmY3c4="
+    },
+    {
+      "name": "file with a decomposed passphrase",
+      "linkKey": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+      "passphrase": "Café",
+      "salt": "202122232425262728292a2b2c2d2e2f",
+      "iv": "909192939495969798999a9b",
+      "content": {
+        "kind": "file",
+        "name": "backup-codes.txt",
+        "mime": "text/plain",
+        "data": "AAEC/v9/gA=="
+      },
+      "payload": "AQEgISIjJCUmJygpKissLS4vkJGSk5SVlpeYmZqbYG0ONZHddf0//jB4mvrQQ7Sri18WD9ND7PPKIJwmkL2tKuFbI96cNv1gvbqKZWDJgvt9uvTDjEZsrJHzyha9Hz7UkBiji3g8FXwdjN9whXtt2RP1HAyR7ia54nxnM8JXJF2Rc3V1MqQqQ671jYP5UmhZ2f1WflaBAaGGeX4UeBvxU+M0idPwrRLYhd/03LgzX9InNkIKPmRFNnPyaxUEKJMcgM7O7bKm9v7hXw/GHFWm+WZ7qIAlJCUOLqbAbNPCZ+hfWBCdLWDDp8Aeu4BW7tO2GmP9eAX+b4IJmKQjMUSRBS4z4Tyo1nx4IqqWHlKTrwAVsHXTdT3QS+q7hJytIwmD4gWGVWTtojdOqKFcPRs="
+    }
+  ]
+}

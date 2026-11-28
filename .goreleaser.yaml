@@ -1,0 +1,53 @@
+# Builds burnlink-cli for the release that release-me already created, and
+# attaches the archives to it. The server image and the chart are built by
+# publish.yaml's other jobs, so nothing here builds, signs or pushes them.
+version: 2
+
+project_name: burnlink-cli
+
+builds:
+  - id: burnlink-cli
+    main: ./cmd/burnlink-cli
+    binary: burnlink-cli
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/ostendorf-cloud/burnlink/internal/buildinfo.Version={{ .Version }}
+      - -X github.com/ostendorf-cloud/burnlink/internal/buildinfo.Commit={{ .FullCommit }}
+
+archives:
+  - id: burnlink-cli
+    ids: [burnlink-cli]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "burnlink-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: burnlink-cli_{{ .Version }}_checksums.txt
+  algorithm: sha256
+
+# release-me writes the changelog and the release notes, goreleaser only adds
+# files to that release.
+changelog:
+  disable: true
+
+# release-me creates alpha, beta, rc and service pack releases as
+# pre-releases. goreleaser sends its own prerelease value for the release it
+# finds, so "auto" keeps a pre-release tag a pre-release and off "latest". The
+# name is the one release-me gives a release of the implicit main component,
+# the tag itself, for example v0.1.0.
+release:
+  mode: append
+  replace_existing_artifacts: true
+  prerelease: auto
+  name_template: "{{ .Tag }}"

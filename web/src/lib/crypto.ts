@@ -15,22 +15,27 @@
 // The server never sees any of this: it stores the payload, and the link key
 // lives in the fragment of the link, which a browser does not send.
 
-export const VERSION = 1
-export const FLAG_PASSPHRASE = 0x01
+// The numbers below come from internal/payload/format.json, the one file the
+// Go client embeds as well, so the page and the terminal cannot drift apart on
+// a constant. The shared vectors in testdata/format pin the rest.
+import format from '../../../internal/payload/format.json'
+
+export const VERSION = format.version
+export const FLAG_PASSPHRASE = format.flags.passphrase
 const KNOWN_FLAGS = FLAG_PASSPHRASE
 
-export const KEY_BYTES = 32
-const IV_BYTES = 12
-const SALT_BYTES = 16
-const TAG_BYTES = 16
+export const KEY_BYTES = format.keyBytes
+export const IV_BYTES = format.ivBytes
+export const SALT_BYTES = format.saltBytes
+export const TAG_BYTES = format.tagBytes
 // Fixed per payload version, never read from the payload, so a forged payload
 // cannot lower it.
-export const PBKDF2_ITERATIONS = 600000
+export const PBKDF2_ITERATIONS = format.pbkdf2.iterations
 // Exported so a test can derive a send flow key without repeating the string.
-export const HKDF_INFO = new TextEncoder().encode('burnlink.de v1 aes-256-gcm')
+export const HKDF_INFO = new TextEncoder().encode(format.hkdf.info)
 // Plaintext is padded to a multiple of this, so the stored size does not
 // reveal the length of a short secret.
-const PAD_BLOCK = 256
+export const PAD_BLOCK = format.padBlock
 
 const subtle = globalThis.crypto.subtle
 
@@ -162,7 +167,7 @@ async function deriveKey(
     )
     const stretched = new Uint8Array(
       await subtle.deriveBits(
-        { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: PBKDF2_ITERATIONS },
+        { name: 'PBKDF2', hash: format.pbkdf2.hash, salt, iterations: PBKDF2_ITERATIONS },
         pass,
         256,
       ),
@@ -174,7 +179,7 @@ async function deriveKey(
   const base = await subtle.importKey('raw', ikm, 'HKDF', false, ['deriveKey'])
   if (ikm !== linkKey) ikm.fill(0)
   return subtle.deriveKey(
-    { name: 'HKDF', hash: 'SHA-256', salt: hkdfSalt, info: HKDF_INFO },
+    { name: 'HKDF', hash: format.hkdf.hash, salt: hkdfSalt, info: HKDF_INFO },
     base,
     { name: 'AES-GCM', length: 256 },
     false,

@@ -29,6 +29,9 @@ COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY web/ ./
+# web/src/lib/crypto.ts imports the payload format from outside web/. The Go
+# client embeds the same file.
+COPY internal/payload/format.json /src/internal/payload/format.json
 
 RUN pnpm run build
 

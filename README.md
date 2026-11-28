@@ -16,8 +16,9 @@ Redis-compatible, read with `GETDEL` so a reveal and a delete happen in one step
 behind it.
 
 The server side and the page are implemented: the store client, the five API endpoints in
-`docs/concepts/burnlink.md`, and the pages that share and reveal a secret. The CLI and the
-mail notification are still ahead. A webhook notification when a link is opened exists. See
+`docs/concepts/burnlink.md`, the pages that share and reveal a secret, and `burnlink-cli`, which
+does the same from a terminal. The mail notification is still ahead. A webhook notification when
+a link is opened exists. See
 `AGENTS.md`'s "Scope of this milestone" for what is built and what is not.
 
 ## Install
@@ -39,6 +40,39 @@ The server reads its configuration from the environment; see the Configuration t
 The store credentials are the only secret-shaped variables and have `_FILE` twins. `/healthz`,
 `/readyz` and `/metrics` answer on a second, administrative listener (`ADMIN_ADDR`), never on the
 public one.
+
+## Command line client
+
+`burnlink-cli` encrypts on your machine with the same format as the page. The archives for Linux,
+macOS and Windows (amd64 and arm64) are attached to every release, with a checksum file.
+
+```sh
+# Text from standard input, prints one link
+echo 'the secret' | burnlink-cli send --lifetime 12h
+
+# A file, under the name it has or --name
+burnlink-cli send --file ./id_ed25519.pub
+
+# Open a link: text goes to standard output, a file is saved without replacing another
+burnlink-cli open 'https://burnlink.de/s/<id>#<key>'
+burnlink-cli open --out ./received/ 'https://burnlink.de/s/<id>#<key>'
+```
+
+| Setting | Purpose |
+| --- | --- |
+| `--server URL` or `BURNLINK_SERVER` | Server to send to, default `https://burnlink.de`. `open` uses the link's own server |
+| `--lifetime` | How long the link stays valid, such as `30m`, `12h` or `7d`. The server's limits apply |
+| `BURNLINK_PASSPHRASE` or `BURNLINK_PASSPHRASE_FILE` (`--passphrase-file`) | Passphrase for `send` and `open`. Never a flag, which would show up in the process list |
+| `--out` | `open` only: a path that must not exist, a directory, or `-` for standard output |
+| `open -` | Reads the link from standard input, which keeps the key out of the process list |
+
+- The link is the only output of `send` on standard output, everything else goes to standard
+  error.
+- Limitation: the server deletes a secret when it is opened, and the client cannot ask whether a
+  passphrase is needed first. A missing or wrong passphrase means the secret is gone and the
+  sender has to send a new one.
+- On a terminal, `open` shows control characters as escapes. Redirect the output or use `--out`
+  to get the exact bytes.
 
 ## Configuration
 
