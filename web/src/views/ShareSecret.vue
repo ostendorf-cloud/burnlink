@@ -2,7 +2,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import {
   GovueButton,
   GovueCard,
@@ -35,6 +35,7 @@ const link = ref<{
   notified: boolean
 } | null>(null)
 const copied = ref(false)
+const linkRegion = ref<HTMLElement | null>(null)
 
 // The page asks the server for its limits once. Without them it still sends,
 // with the server's own default lifetime, and the server enforces its limits.
@@ -141,6 +142,12 @@ async function send() {
     file.value = null
     if (fileInput.value) fileInput.value.value = ''
     passphrase.value = ''
+    // The link is below the form: a keyboard user lands on it, ready to copy.
+    sending.value = false
+    await nextTick()
+    const field = linkRegion.value?.querySelector('input')
+    field?.focus()
+    field?.select()
   } catch (err) {
     errorMessage.value = messageFor(err)
   } finally {
@@ -208,7 +215,7 @@ async function copy() {
       <GovueButton variant="primary" type="submit" :loading="sending">Create link</GovueButton>
     </form>
 
-    <div v-if="link" class="flex flex-col gap-2" data-testid="secret-link">
+    <div v-if="link" ref="linkRegion" class="flex flex-col gap-2" data-testid="secret-link">
       <p class="text-text">
         Send this link to one person. It works exactly once, until
         {{ link.expiresAt.toLocaleString() }}. Whoever opens it first gets the secret.

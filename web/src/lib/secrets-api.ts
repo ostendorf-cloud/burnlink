@@ -46,6 +46,16 @@ export async function storeSecret(
 }
 
 /**
+ * checkSecret asks whether the secret id names is still there. It takes
+ * nothing and leaves the lifetime alone. Every refusal is the same 404, so an
+ * unknown, expired and already opened id look alike. The client must send
+ * HEAD, see createHeadClient.
+ */
+export async function checkSecret(client: ApiClient, id: string): Promise<void> {
+  await client.get<void>(`/secrets/${encodeURIComponent(id)}`)
+}
+
+/**
  * openSecret reads and deletes the secret id names. The server removes it in
  * the same step: a caller that loses the answer cannot ask again.
  */
