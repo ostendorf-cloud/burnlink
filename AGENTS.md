@@ -44,6 +44,13 @@ The global baseline already applies here and is not repeated below.
   and never blocks or undoes a redemption. Retry: 3 attempts, 5 s each, 20 s total, backoff 1 s
   then 4 s, only 5xx, 429, 408 and transport errors retry, at most 32 in flight, response read
   to 4 KiB. No delivery guarantee. A change here changes `PrivacyText.vue` and `SecurityView.vue`.
+- `internal/payload` is the Go side of the payload format, `internal/client` the HTTP client and
+  link parser, `internal/cli` the `send` and `open` commands, `cmd/burnlink-cli` the binary.
+  `internal/payload/format.json` is the one source of the format constants: `web/src/lib/crypto.ts`
+  imports it, Go embeds it, the Dockerfile copies it into the frontend stage. The golden vectors in
+  `testdata/format` run in `go test` and in vitest, so a format change fails both until
+  `go test ./internal/payload -run TestVectors -update` and a version bump. The CLI never takes a
+  passphrase as a flag. `.goreleaser.yaml` builds its archives for `publish.yaml`'s `cli` job.
 - Page views are counted by govue's `analytics`, wired in `cmd/burnlink` directly around the mux
   (innermost: it reads the route pattern the mux sets, which `RequestID` and the security
   middleware would hide). `UMAMI_URL` and `UMAMI_WEBSITE_ID` come from
@@ -130,7 +137,6 @@ listener, the Helm chart, the container build, the store client and the five sec
 exist, and so does the page that encrypts in the browser, calls the endpoints and reveals a
 secret once. Left out, tracked as later milestones:
 
-- A CLI client: sending a secret from a terminal with the same crypto the page uses.
 - A pickup notification by mail. The webhook variant exists, see `internal/notify`.
 
 The request-link feature, the reverse direction where an owner publishes a link and a stranger

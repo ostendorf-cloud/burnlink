@@ -142,11 +142,17 @@ Known limits:
   release to keep in step.
 - Drift: the page's crypto is TypeScript, ported and reviewed as `web/src/lib/crypto.ts`; a Go
   CLI reimplementing the same payload format is a second language against one format, exactly what
-  old_burnlink's own ADR 0002 flagged as a risk for a single implementation. A golden-file,
-  cross-language test suite, encrypting in one language and decrypting in the other against the
-  documented payload format, is proposed to hold the two honest, the same way old_burnlink's own
-  crypto tests build a payload from the documented format and decrypt it. Whether this lands as a
-  dedicated task target or as part of `task test` is open.
+  old_burnlink's own ADR 0002 flagged as a risk for a single implementation. Two things hold the
+  two honest. One JSON file, `internal/payload/format.json`, carries every constant of the format,
+  read by `crypto.ts` and embedded by Go. A golden-vector suite in `testdata/format` holds
+  payloads with their keys and plaintexts, and both `go test` (`task test:go`) and vitest
+  (`task web:test`) decrypt them and reproduce them byte for byte. A change to the format fails
+  both until the vectors are regenerated.
+- Passphrase: the CLI reads it from the environment or a file, never from a flag. The server
+  deletes a secret when it is opened, so the client cannot find out first that a passphrase is
+  needed. A missing or wrong one costs the secret, and the client says so.
+- Release: `.goreleaser.yaml` builds the archives, and a job in `publish.yaml` attaches them to
+  the release release-me created.
 - Effect: the CLI changes nothing about what the server learns. It speaks the same public API as
   the page and carries no server-side counterpart of its own.
 
@@ -236,8 +242,8 @@ Built for the webhook, as decided:
   [0003](../adr/0003-request-link-key-material.md). Still open there: whether a submitter can be
   given any way to confirm the public key they were handed belongs to the owner, with the owner
   offline. Nothing was found that does this for an anonymous submitter. Next step: none known.
-- The CLI's drift-prevention mechanism, a golden-file cross-language test suite, is proposed but
-  not built. Next step: confirm the approach when `cmd/burnlink-cli` is scheduled.
+- The CLI cannot send a pickup notification target yet, and it keeps no ciphertext for a retry
+  after a failed store. Next step: a follow up issue if either is wanted.
 - Pickup notification by mail. Not designed yet, tracked as its own issue. The webhook variant
   is built and decided, see "Pickup notification". Still open there: an operator switch to turn
   the webhook off, a signature on the request, and whether port 443 is too strict.
