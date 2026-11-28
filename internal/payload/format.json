@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "flags": {
+    "passphrase": 1
+  },
+  "keyBytes": 32,
+  "ivBytes": 12,
+  "saltBytes": 16,
+  "tagBytes": 16,
+  "padBlock": 256,
+  "pbkdf2": {
+    "hash": "SHA-256",
+    "iterations": 600000
+  },
+  "hkdf": {
+    "hash": "SHA-256",
+    "info": "burnlink.de v1 aes-256-gcm"
+  }
+}
