@@ -3,7 +3,7 @@ module github.com/ostendorf-cloud/burnlink
 go 1.27
 
 require (
-	github.com/ostendorf-cloud/govue v0.5.0
+	github.com/ostendorf-cloud/govue v0.12.0
 	github.com/redis/go-redis/v9 v9.24.1
 	golang.org/x/text v0.44.0
 )
