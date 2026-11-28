@@ -56,6 +56,11 @@ tasks:
     cmds:
       - hadolint Dockerfile
 
+  lint:goreleaser:
+    desc: GoReleaser configuration check
+    cmds:
+      - goreleaser check
+
   lint:license:
     desc: License header check for every Go and web source file
     cmds:
@@ -190,6 +195,7 @@ tasks:
       - task: lint:actions
       - task: lint:secrets
       - task: lint:docker
+      - task: lint:goreleaser
       - task: lint:license
       - task: lint:shell
       - task: lint:helm
