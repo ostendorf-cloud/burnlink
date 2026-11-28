@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	github.com/ostendorf-cloud/govue v0.5.0
-	github.com/redis/go-redis/v9 v9.24.0
+	github.com/redis/go-redis/v9 v9.24.1
 )
 
 require (
