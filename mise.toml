@@ -13,7 +13,7 @@ pnpm = "12.23.0"
 # cannot read the stdlib export data of a newer one, so the two versions move together.
 golangci-lint = "2.15.0"
 # Builds the burnlink-cli archives that publish.yaml attaches to a release.
-goreleaser = "2.20.2"
+goreleaser = "2.20.3"
 actionlint = "1"
 markdownlint-cli2 = "0.24.2"
 yamllint = "1"
