@@ -143,7 +143,9 @@ func TestLoadRejectsAnInvalidTrustedProxyCIDR(t *testing.T) {
 	if !strings.Contains(err.Error(), "config:") {
 		t.Errorf("Load() error = %q, want it wrapped with \"config:\"", err.Error())
 	}
-	if !strings.Contains(err.Error(), "not-a-cidr") {
-		t.Errorf("Load() error = %q, want it to name the invalid value", err.Error())
+	// Newer govue releases keep the rejected value out of the error, older ones
+	// quote it. Both name the failing step, which is all this test relies on.
+	if !strings.Contains(err.Error(), "clientip: trusted proxy") {
+		t.Errorf("Load() error = %q, want it to name the trusted proxy parse step", err.Error())
 	}
 }
