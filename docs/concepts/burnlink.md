@@ -126,11 +126,16 @@ Known limits:
   clipboards and chat logs, where one leak exposes every submission at once.
 - Loss: losing the private key makes every secret ever sent to that request link permanently
   unrecoverable. The server holds only ciphertext and cannot help recover it either, because it
-  was never given a key to begin with. 0003 names what destroys it: cleared site data, another
+  was never given the private key to begin with. 0003 names what destroys it: cleared site data, another
   browser or device, a private window, or a browser that drops script written storage after a
   period without interaction.
-- Effect: the server still never learns the content of a submission, and is never handed key
-  material either; it stores ciphertext it cannot decrypt, exactly as the send flow does. What is
+- Owner check: the open endpoint tells the owner from a submitter by an auth value the owner
+  derives from their own keypair under its own label. The server stores its SHA-256 and receives
+  the raw value on each open. It is a bearer credential: whoever sees an open request can delete
+  that link's submissions, but not read them. Every link gets a fresh keypair, so the value does
+  not correlate one owner's links. Settled in 0003.
+- Effect: the server still never learns the content of a submission, and is never handed a public
+  or private key; it stores ciphertext it cannot decrypt, exactly as the send flow does. What is
   new is that a submitter has to trust the link they were given, because nothing lets them confirm
   the public key in it belongs to the owner.
 

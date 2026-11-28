@@ -50,16 +50,46 @@ fragment, and keep the owner's private key as a non-extractable `CryptoKey` in I
   fixed with the implementation.
 - The private key is generated non-extractable, stored in IndexedDB, and never leaves the device.
   There is no second private link and no server-side escrow.
+- The open endpoint must tell the owner from a submitter, because both know the link's id. The
+  owner derives an auth value: a self ECDH of their own keypair (the public key as peer), then
+  HKDF-SHA-256 under the label `burnlink.de v1 requestlink owner-auth`, 32 bytes. At creation the
+  page sends only the SHA-256 digest, so the raw value never reaches the server then. The server
+  stores the digest. On every open the owner sends the raw value, which the server hashes and
+  compares in constant time. A wrong value answers like an unknown link.
+- The private key is what keeps a submitter from the auth value. A submitter who sets the
+  ephemeral public key to the owner's cannot compute that ECDH, because it needs the owner's
+  private key.
+- The auth label differs from the submission label for domain separation: one ECDH input never
+  feeds two purposes. The label is not the protection. The submission info appends both public
+  keys and the auth info is the label alone, so a shared label would not make the outputs equal.
+- Plain SHA-256 is right for the stored digest: the value has 32 bytes of entropy, so a slow hash
+  adds nothing and only costs the open path.
+- Every request link gets a fresh keypair, generated when the link is created and stored under
+  that link's id. A reused keypair gives every link the same auth value and the same public key,
+  and so correlates the owner's links to each other. The page enforces this by construction. The
+  server does not check it. A check needs an index of digests across links, and that index is
+  itself a record that correlates them.
 
 ## Consequences
 
 - Positive: no new dependency. X25519 `generateKey`, `importKey` and `deriveBits` are in Web
   Crypto across all three engines, and HKDF plus AES-256-GCM are already in the ported file.
-- Positive: the server is handed no key material at all, so it stores ciphertext it cannot decrypt
-  and holds nothing it could substitute, exactly as in the send flow. The private key is
-  non-extractable on top of that, which bounds how long a page compromise keeps paying rather than
-  what it reaches: script on the page can decrypt and exfiltrate every submission it can read
-  while it runs, it just cannot carry the key away and keep reading afterwards.
+- Positive: the server is handed neither the public key nor the private key. It stores ciphertext
+  it cannot decrypt and holds nothing it could substitute, as in the send flow. It does hold the
+  hash of the owner auth value and receives the raw value on every open. That value is derived
+  from the keypair but is not a key: it cannot decrypt a submission or derive the private key.
+- Positive: the private key is non-extractable, which bounds how long a page compromise keeps
+  paying rather than what it reaches: script on the page can decrypt and exfiltrate every
+  submission it can read while it runs, it just cannot carry the key away and keep reading
+  afterwards.
+- Negative: the owner auth value is a bearer credential for draining a link. Anyone who observes
+  an open request body, at a proxy, in a log or in a hostile page, can send it and delete that
+  link's submissions permanently. They cannot read them. The value stays valid until the link
+  expires, and the TLS terminating proxy must not log request bodies.
+- Negative: the server sees the same digest on every open of a link and the same raw value, so it
+  can tell visits to one link apart from visits to another. With a fresh keypair per link it
+  cannot connect two links to one owner. An owner who reuses a keypair outside the page loses
+  that.
 - Negative: a substituted public key is still not detected, it is only harder to place. Whoever
   can alter the link between the owner and the submitter, in a chat log, a mail, or a page that
   republishes it, can swap the fragment and read every submission that follows, and neither party
@@ -73,11 +103,12 @@ fragment, and keep the owner's private key as a non-extractable `CryptoKey` in I
 - Negative: losing the key is final and no backup can be taken later, because the key is
   non-extractable by choice. Cleared site data, a different browser or device, or a private window
   destroys every secret ever submitted to that request link, and the server cannot help because it
-  was never given a key. Eviction under storage pressure is not Safari-specific; Safari adds a
-  seven-day cap on script-writable storage that only counts days of Safari use without interaction
-  on the site, so an owner returning to read submissions resets it. `navigator.storage.persist()`
-  is the one lever the page has and is requested at creation. The owner has to accept the loss
-  before publishing a link, stated on the page at creation, not in a help text.
+  was never given the private key. Eviction under storage pressure is not Safari-specific; Safari
+  adds a seven-day cap on script-writable storage that only counts days of Safari use without
+  interaction on the site, so an owner returning to read submissions resets it.
+  `navigator.storage.persist()` is the one lever the page has and is requested at creation. The
+  owner has to accept the loss before publishing a link, stated on the page at creation, not in a
+  help text.
 - Negative: a submission is not authenticated. The AEAD proves the ciphertext was not altered
   after sealing; it proves nothing about who sealed it. Anyone holding the request link can submit.
   The owner cannot tell two submissions apart beyond arrival order, and cannot tell a real one from
@@ -121,6 +152,12 @@ fragment, and keep the owner's private key as a non-extractable `CryptoKey` in I
   engine, so the gap it leaves is every non-Chromium submitter rather than an older version of
   one. Revisit when it is available across browsers; the payload is versioned, which is what makes
   that revisit cheap.
+
+### An open endpoint with no owner check
+
+- Simplest: the id alone opens the link, as the send flow's id alone opens a secret.
+- Rejected: here the id is also in the public link, so every submitter could drain the link
+  and delete what other strangers sent.
 
 ### A second, private link carrying the owner's private key
 

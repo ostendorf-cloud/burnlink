@@ -48,6 +48,39 @@ describe('CreateRequestLink', () => {
     expect(saveOwnerKey).toHaveBeenCalledWith('abc123', expect.anything())
   })
 
+  it('generates a fresh keypair for every link it creates', async () => {
+    vi.mocked(createRequestLink)
+      .mockResolvedValueOnce({
+        id: 'abc123',
+        expiresAt: new Date('2026-02-01T00:00:00Z'),
+        maxSubmissionBytes: 1048576,
+        maxConcurrentSubmissions: 50,
+      })
+      .mockResolvedValueOnce({
+        id: 'def456',
+        expiresAt: new Date('2026-02-01T00:00:00Z'),
+        maxSubmissionBytes: 1048576,
+        maxConcurrentSubmissions: 50,
+      })
+
+    render(CreateRequestLink)
+    await userEvent.click(screen.getByRole('button', { name: 'Create a request link' }))
+    await waitFor(() => expect(saveOwnerKey).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByDisplayValue(/\/r\/abc123#/)).toBeVisible())
+    await userEvent.click(screen.getByRole('button', { name: 'Create a request link' }))
+    await waitFor(() => expect(saveOwnerKey).toHaveBeenCalledTimes(2))
+
+    const [firstCall, secondCall] = vi.mocked(createRequestLink).mock.calls
+    expect(firstCall[1]).toHaveLength(32)
+    expect(secondCall[1]).toHaveLength(32)
+    expect(firstCall[1]).not.toEqual(secondCall[1])
+
+    const [firstSave, secondSave] = vi.mocked(saveOwnerKey).mock.calls
+    expect(firstSave[0]).toBe('abc123')
+    expect(secondSave[0]).toBe('def456')
+    expect(firstSave[1].publicKeyRaw).not.toEqual(secondSave[1].publicKeyRaw)
+  })
+
   it('shows an error instead of a link when the server refuses the request', async () => {
     vi.mocked(createRequestLink).mockRejectedValue(new Error('server exploded'))
 
