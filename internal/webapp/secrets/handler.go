@@ -30,6 +30,7 @@ import (
 	"github.com/ostendorf-cloud/govue/ratelimit"
 
 	"github.com/ostendorf-cloud/burnlink/internal/buildinfo"
+	"github.com/ostendorf-cloud/burnlink/internal/notify"
 	"github.com/ostendorf-cloud/burnlink/internal/store"
 )
 
@@ -66,9 +67,28 @@ type Vault interface {
 	Put(ctx context.Context, id string, ciphertext []byte, ttl time.Duration) error
 	Take(ctx context.Context, id string) ([]byte, error)
 	Exists(ctx context.Context, id string) (bool, error)
+	// PutTarget and TakeTarget keep the optional pickup notification target
+	// of a secret under its id. TakeTarget returns "" when there is none.
+	PutTarget(ctx context.Context, id, target string, ttl time.Duration) error
+	TakeTarget(ctx context.Context, id string) (string, error)
 }
 
 var _ Vault = (*store.Secrets)(nil)
+
+// Notifier validates a sender's webhook URL and delivers the notification.
+// *notify.Notifier is the production implementation. Notify returns at once
+// and never fails: a delivery that does not succeed is the notifier's to log.
+type Notifier interface {
+	Validate(raw string) error
+	Notify(ctx context.Context, id string, redeemedAt time.Time, target string)
+}
+
+var _ Notifier = (*notify.Notifier)(nil)
+
+// targetTimeout bounds taking the target out of the store. It runs after the
+// secret was handed out, so it must neither hang the answer nor end with a
+// client that went away.
+const targetTimeout = 2 * time.Second
 
 // Config is everything New needs. Every field except Now and Build is
 // required.
@@ -90,6 +110,9 @@ type Config struct {
 	Now func() time.Time
 	// Build reports the running build. Defaults to buildinfo.Read.
 	Build func() buildinfo.Info
+	// Notifier enables the optional pickup notification. Without it a store
+	// request that names a target is refused.
+	Notifier Notifier
 }
 
 // Handler answers the secret endpoints. Build it with New.
@@ -218,6 +241,10 @@ type storeRequest struct {
 	Ciphertext string `json:"ciphertext"`
 	// LifetimeSeconds is optional; the default lifetime applies without it.
 	LifetimeSeconds *int64 `json:"lifetimeSeconds"`
+	// NotifyURL is optional: an https webhook the server calls once, with the
+	// id and the time and nothing else, when the secret is opened. The server
+	// stores it in plain text and so learns it.
+	NotifyURL string `json:"notifyUrl"`
 }
 
 type storeResponse struct {
@@ -231,7 +258,9 @@ func (h *Handler) store(w http.ResponseWriter, r *http.Request) error {
 	// request is never held in memory. The envelope limit covers the base64
 	// expansion of a ciphertext of exactly MaxBytes plus the JSON around it;
 	// the decoded length is checked exactly below.
-	envelope := int64((h.cfg.MaxBytes+2)/3)*4 + jsonOverhead
+	// The target's room is twice its limit: JSON escapes some printable
+	// characters in it.
+	envelope := int64((h.cfg.MaxBytes+2)/3)*4 + jsonOverhead + 2*notify.MaxTargetBytes
 	var req storeRequest
 	if err := api.DecodeLimit(r, &req, envelope); err != nil {
 		return err
@@ -257,11 +286,32 @@ func (h *Handler) store(w http.ResponseWriter, r *http.Request) error {
 		lifetime = time.Duration(seconds) * time.Second
 	}
 
+	// One fixed message for every refusal of a target: it never repeats the
+	// value, and it does not say which check failed.
+	if req.NotifyURL != "" {
+		if h.cfg.Notifier == nil || h.cfg.Notifier.Validate(req.NotifyURL) != nil {
+			return api.Invalid("notifyUrl must be an https URL on port 443 to a public host")
+		}
+	}
+
 	id, err := NewID()
 	if err != nil {
 		return api.Internal(err)
 	}
+	// The target goes first, so a secret that can be taken always has its
+	// target in place, and it gets the secret's lifetime, so it never outlives
+	// it.
+	if req.NotifyURL != "" {
+		if err := h.cfg.Vault.PutTarget(r.Context(), id, req.NotifyURL, lifetime); err != nil {
+			return api.Internal(fmt.Errorf("secrets: store target: %w", err))
+		}
+	}
 	if err := h.cfg.Vault.Put(r.Context(), id, ciphertext, lifetime); err != nil {
+		if req.NotifyURL != "" {
+			// Best effort: without the secret the target is worthless, and it
+			// expires on its own at the latest.
+			h.dropTarget(r.Context(), id)
+		}
 		// ErrExists included: a collision of 128 random bits is a bug, not
 		// a condition to paper over with a retry.
 		return api.Internal(fmt.Errorf("secrets: store: %w", err))
@@ -306,7 +356,33 @@ func (h *Handler) open(w http.ResponseWriter, r *http.Request) error {
 		h.refuse(w, r)
 		return nil
 	}
+	h.notifyRedeemed(r.Context(), id)
 	return api.Write(w, http.StatusOK, openResponse{Ciphertext: base64.StdEncoding.EncodeToString(ciphertext)})
+}
+
+// notifyRedeemed fires the pickup notification of a secret that was just
+// handed out. Nothing in it can fail the redemption: the secret is already
+// gone from the store, so every problem here is logged and dropped.
+func (h *Handler) notifyRedeemed(ctx context.Context, id string) {
+	// Taken even without a notifier, so a target never outlives its secret.
+	tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), targetTimeout)
+	defer cancel()
+	target, err := h.cfg.Vault.TakeTarget(tctx, id)
+	if err != nil {
+		logging.FromContext(ctx).WarnContext(ctx, "pickup notification target not read", "error", err.Error())
+		return
+	}
+	if target == "" || h.cfg.Notifier == nil {
+		return
+	}
+	h.cfg.Notifier.Notify(ctx, id, h.cfg.Now().UTC(), target)
+}
+
+// dropTarget removes a target whose secret was never stored. Best effort.
+func (h *Handler) dropTarget(ctx context.Context, id string) {
+	tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), targetTimeout)
+	defer cancel()
+	_, _ = h.cfg.Vault.TakeTarget(tctx, id)
 }
 
 type configResponse struct {

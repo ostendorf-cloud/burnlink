@@ -49,6 +49,16 @@ const { locale } = useLanguage()
         Zeitpunkt des Ablaufs. Der Server kann die Daten nicht entschlüsseln.
       </li>
       <li>Gespeichert wird in einem Redis-kompatiblen Speicher (Valkey), der zum Dienst gehört.</li>
+      <li>
+        Nur wenn der Absender eine Benachrichtigung wünscht: die von ihm eingegebene
+        Webhook-Adresse, im Klartext, unter derselben Kennung und mit derselben Lebensdauer wie das
+        Geheimnis. Der Server kann diese Adresse lesen. Sie kann personenbezogene Daten enthalten.
+        Sie wird beim ersten Öffnen gelöscht, spätestens mit dem Ablauf. Beim ersten Öffnen sendet
+        der Server genau eine Anfrage an diese Adresse, mit der Kennung des Links und dem Zeitpunkt
+        des Öffnens, nie mit dem Geheimnis. Bei einem Fehler wiederholt er sie höchstens zweimal.
+        Die Adresse wird nicht protokolliert. Der Empfänger der Anfrage ist der Betreiber des vom
+        Absender gewählten Dienstes.
+      </li>
     </ul>
 
     <h2 class="text-xl font-semibold text-text">Wie lange</h2>
@@ -177,6 +187,15 @@ const { locale } = useLanguage()
         cannot decrypt the data.
       </li>
       <li>It is stored in a Redis compatible store (Valkey) that belongs to the service.</li>
+      <li>
+        Only if the sender asks for a notification: the webhook address the sender entered, in plain
+        text, under the same id and with the same lifetime as the secret. The server can read this
+        address. It may contain personal data. It is deleted when the secret is first opened, and at
+        the latest when it expires. When the secret is first opened, the server sends exactly one
+        request to that address, with the id of the link and the time it was opened, never the
+        secret. On a failure it repeats the request at most twice. The address is not logged. The
+        recipient of the request is the operator of the service the sender chose.
+      </li>
     </ul>
 
     <h2 class="text-xl font-semibold text-text">For how long</h2>

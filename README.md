@@ -17,8 +17,8 @@ behind it.
 
 The server side and the page are implemented: the store client, the five API endpoints in
 `docs/concepts/burnlink.md`, and the pages that share and reveal a secret. The CLI and the
-notification are still ahead. See `AGENTS.md`'s "Scope of this milestone" for what is built and
-what is not.
+mail notification are still ahead. A webhook notification when a link is opened exists. See
+`AGENTS.md`'s "Scope of this milestone" for what is built and what is not.
 
 ## Install
 

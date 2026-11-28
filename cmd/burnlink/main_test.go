@@ -108,6 +108,34 @@ func TestBuildHandlerAppliesTheConfiguration(t *testing.T) {
 	}
 }
 
+// TestBuildHandlerWiresTheNotifier proves the production notifier reaches the
+// secret endpoint: a public https target is accepted and a loopback one is
+// refused. Nothing is opened, so nothing is delivered.
+func TestBuildHandlerWiresTheNotifier(t *testing.T) {
+	handler, err := buildHandler(testLogger(), testConfig(t), testVault())
+	if err != nil {
+		t.Fatalf("buildHandler() error = %v", err)
+	}
+	post := func(target string) int {
+		body := `{"ciphertext":"c2VjcmV0","notifyUrl":"` + target + `"}`
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/secrets", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = "198.51.100.9:4000"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if got := post("https://hooks.example.com/burnlink"); got != http.StatusCreated {
+		t.Errorf("a public https target = %d, want 201", got)
+	}
+	if got := post("https://127.0.0.1/burnlink"); got != http.StatusBadRequest {
+		t.Errorf("a loopback target = %d, want 400", got)
+	}
+	if got := post("http://hooks.example.com/burnlink"); got != http.StatusBadRequest {
+		t.Errorf("a plain http target = %d, want 400", got)
+	}
+}
+
 // TestPublicHandlerMarksAPIRedirectsNoStore proves the outer middleware is in
 // the chain: the mux's redirect of an unclean API path is no-store too.
 func TestPublicHandlerMarksAPIRedirectsNoStore(t *testing.T) {

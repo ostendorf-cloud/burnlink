@@ -27,7 +27,8 @@
 ## Non goals
 
 - The three additions below ship in later milestones. This document designs them ahead of that
-  work; none of them exist in the running app yet.
+  work. The webhook variant of the pickup notification exists; the CLI client and the mail
+  variant do not.
 - No migration of old_burnlink's own stored secrets: their lifetime is at most a week, so nothing
   outlives the cutover.
 - No link issued by otp.ostendorf.cloud or old_burnlink gains new compatibility; the format and
@@ -74,7 +75,7 @@
 
 | Method and path | Request | Answers |
 | --- | --- | --- |
-| `POST /api/v1/secrets` | JSON `{"ciphertext": <standard base64>, "lifetimeSeconds": <optional>}` | `201` with `{"id", "expiresAt"}`, `400`, `403`, `413`, `415`, `429` |
+| `POST /api/v1/secrets` | JSON `{"ciphertext": <standard base64>, "lifetimeSeconds": <optional>, "notifyUrl": <optional>}` | `201` with `{"id", "expiresAt"}`, `400`, `403`, `413`, `415`, `429` |
 | `HEAD /api/v1/secrets/{id}` | none | `200` with no body, or the one refusal |
 | `POST /api/v1/secrets/{id}/open` | JSON content type, body ignored | `200` with `{"ciphertext"}` and the secret is gone, or the one refusal |
 | `GET /api/v1/config` | none | `200` with `{"maxCiphertextBytes", "lifetime": {"minSeconds", "maxSeconds", "defaultSeconds"}}` |
@@ -165,6 +166,40 @@ Known limits:
   something about who is involved in exchanging it, which the core design otherwise never
   collects.
 
+Built for the webhook, as decided:
+
+- Scope: the sender may add `notifyUrl` to the store call, or nothing, which is the default. The
+  mail address is a separate later milestone.
+- Storage: the target sits under its own key `notify:<id>` with the secret's lifetime. Store
+  writes the target first, then the secret, and drops the target when the secret write fails.
+  Redeeming takes the secret first, then the target. The target is gone with the secret, and at
+  the latest when the lifetime ends. A crash between the two takes loses the notification.
+- Page: the field where the sender types the address says that the server stores it and learns
+  it. The security page and the privacy text say the same.
+- Delivery: after the secret is taken, one asynchronous POST with a JSON body of `id` and
+  `redeemedAt` in UTC. The payload and the key never enter the notifier, and a test proves the
+  body holds nothing else. A failed delivery never blocks or reverses a redemption.
+- Validation at store time: scheme https, port 443 or none, no userinfo or fragment, printable
+  ASCII, at most 2048 bytes, no blocked IP literal. A refusal is one fixed `400` that does not
+  repeat the address.
+- Validation at connect time: a `net.Dialer.Control` checks the resolved `ip:port` of every
+  connection, so a name that resolves to a blocked address after the store call is still
+  refused. Blocked IPv4: 0/8, 10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.0.0/24,
+  192.0.2/24, 192.88.99/24, 192.168/16, 198.18/15, 198.51.100/24, 203.0.113/24, 224/4, 240/4.
+  IPv6 allows only 2000::/3 minus 2001::/23, 2001:db8::/32, 2002::/16 and 3fff::/20. An IPv4
+  mapped address is unmapped first and a zone is refused.
+- Transport: no proxy, no keep-alive, redirects are never followed and a 3xx is a permanent
+  failure. The response is read to 4 KiB and headers to 8 KiB.
+- Retry and timeout: 3 attempts, 5 s each, 20 s in total, backoff 1 s then 4 s. A 2xx succeeds.
+  A 5xx, 429, 408 or a transport error is retried. Any other 4xx, a 3xx and a blocked address
+  stop at once. At most 32 notifications run at the same time, a further one is dropped and
+  logged.
+- Logging: one line with a fixed reason, never the URL, the host or the id.
+- Guarantee: none beyond this. A notification can be lost, and the page says so.
+- Known limits: a sender can make the server send one fixed POST to any public https host on
+  port 443, bounded by the rate limit and the cap of 32. The request is not signed. A server
+  restart drops notifications in flight, the shutdown waits for them up to a fixed time.
+
 ### Page view counting
 
 - Shape: govue's `analytics` package, wired directly around the mux in `cmd/burnlink`. Off unless
@@ -203,8 +238,9 @@ Known limits:
   offline. Nothing was found that does this for an anonymous submitter. Next step: none known.
 - The CLI's drift-prevention mechanism, a golden-file cross-language test suite, is proposed but
   not built. Next step: confirm the approach when `cmd/burnlink-cli` is scheduled.
-- Pickup notification's delivery guarantees: retries, timeouts and SSRF guarding for a
-  sender-supplied webhook URL. Not designed yet. Next step: owner of that milestone.
+- Pickup notification by mail. Not designed yet, tracked as its own issue. The webhook variant
+  is built and decided, see "Pickup notification". Still open there: an operator switch to turn
+  the webhook off, a signature on the request, and whether port 443 is too strict.
 
 ## Related ADRs
 

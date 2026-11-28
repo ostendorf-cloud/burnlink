@@ -692,6 +692,10 @@ func (v *recordingVault) calls() int {
 }
 
 func (*recordingVault) Put(context.Context, string, []byte, time.Duration) error { return nil }
+func (*recordingVault) PutTarget(context.Context, string, string, time.Duration) error {
+	return nil
+}
+func (*recordingVault) TakeTarget(context.Context, string) (string, error) { return "", nil }
 func (v *recordingVault) Take(_ context.Context, id string) ([]byte, error) {
 	v.record(id)
 	return nil, store.ErrNotFound
@@ -723,6 +727,14 @@ type failingVault struct{}
 
 func (failingVault) Put(context.Context, string, []byte, time.Duration) error {
 	return errors.New("dial tcp: boom")
+}
+
+func (failingVault) PutTarget(context.Context, string, string, time.Duration) error {
+	return errors.New("dial tcp: boom")
+}
+
+func (failingVault) TakeTarget(context.Context, string) (string, error) {
+	return "", errors.New("dial tcp: boom")
 }
 
 func (failingVault) Take(context.Context, string) ([]byte, error) {

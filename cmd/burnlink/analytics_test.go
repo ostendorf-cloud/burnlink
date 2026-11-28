@@ -17,6 +17,7 @@ import (
 	"github.com/ostendorf-cloud/govue/analytics"
 
 	"github.com/ostendorf-cloud/burnlink/internal/config"
+	"github.com/ostendorf-cloud/burnlink/internal/notify"
 )
 
 const testWebsiteID = "0b1d3a52-7c0e-4f55-9f3c-2f6a7d8e9c10"
@@ -77,7 +78,7 @@ func newCounting(t *testing.T, stub *umamiStub) *counting {
 	if err != nil {
 		t.Fatalf("newViews() error = %v", err)
 	}
-	handler, err := buildPublicHandler(testLogger(), cfg, testVault(), views)
+	handler, err := buildPublicHandler(testLogger(), cfg, testVault(), notify.New(notify.Config{}), views)
 	if err != nil {
 		t.Fatalf("buildPublicHandler() error = %v", err)
 	}

@@ -29,6 +29,7 @@ import (
 	"github.com/ostendorf-cloud/govue/ratelimit"
 
 	"github.com/ostendorf-cloud/burnlink/internal/config"
+	"github.com/ostendorf-cloud/burnlink/internal/notify"
 	"github.com/ostendorf-cloud/burnlink/internal/store"
 	"github.com/ostendorf-cloud/burnlink/internal/store/redisstore"
 	"github.com/ostendorf-cloud/burnlink/internal/webapp/secrets"
@@ -75,7 +76,12 @@ func run() error {
 	}
 	defer closeViews(logger, views)
 
-	publicHandler, err := buildPublicHandler(logger, cfg, secrets, views)
+	// Pickup notifications are sent in the background. On shutdown the ones
+	// still running get a bounded time to finish.
+	notifier := notify.New(notify.Config{Logger: logger})
+	defer closeNotifier(logger, notifier)
+
+	publicHandler, err := buildPublicHandler(logger, cfg, secrets, notifier, views)
 	if err != nil {
 		return err
 	}
@@ -152,23 +158,38 @@ func closeViews(logger *slog.Logger, views *analytics.Client) {
 	}
 }
 
-// buildHandler is buildPublicHandler with page view counting off.
+// notifierCloseTimeout bounds how long shutdown waits for pickup
+// notifications still being delivered. A delivery has its own bounds, so
+// what is left after this ends with the process.
+const notifierCloseTimeout = 10 * time.Second
+
+func closeNotifier(logger *slog.Logger, notifier *notify.Notifier) {
+	ctx, cancel := context.WithTimeout(context.Background(), notifierCloseTimeout)
+	defer cancel()
+	if err := notifier.Close(ctx); err != nil {
+		logger.Warn("pickup notifications were lost on shutdown", "error", err)
+	}
+}
+
+// buildHandler is buildPublicHandler with page view counting off and a
+// notifier that has the production guard.
 func buildHandler(logger *slog.Logger, cfg config.Config, vault secrets.Vault) (http.Handler, error) {
 	off, err := analytics.New(analytics.Config{}, analytics.Options{})
 	if err != nil {
 		return nil, fmt.Errorf("burnlink: %w", err)
 	}
-	return buildPublicHandler(logger, cfg, vault, off)
+	return buildPublicHandler(logger, cfg, vault, notify.New(notify.Config{Logger: logger}), off)
 }
 
 // buildPublicHandler serves the embedded SPA bundle and the secret API behind
 // govue's default security headers and access log. The client address, for
 // the rate limit and the access log alike, is resolved from the trusted
-// proxy ranges in cfg. views counts a page view after the page was served.
+// proxy ranges in cfg. notifier delivers the optional pickup notification.
+// views counts a page view after the page was served.
 // It wraps the mux directly, innermost, because it reads the route pattern
 // the mux sets: RequestID and the security middleware replace the request,
 // which would hide the pattern from it.
-func buildPublicHandler(logger *slog.Logger, cfg config.Config, vault secrets.Vault, views *analytics.Client) (http.Handler, error) {
+func buildPublicHandler(logger *slog.Logger, cfg config.Config, vault secrets.Vault, notifier secrets.Notifier, views *analytics.Client) (http.Handler, error) {
 	dist, err := fs.Sub(distFS, "dist")
 	if err != nil {
 		return nil, fmt.Errorf("burnlink: %w", err)
@@ -183,6 +204,7 @@ func buildPublicHandler(logger *slog.Logger, cfg config.Config, vault secrets.Va
 		LifetimeDefault: cfg.Secrets.LifetimeDefault,
 		Limiter:         ratelimit.New(cfg.RateLimit.Burst, cfg.RateLimit.Per, rateLimitKeys),
 		ClientIP:        clientIPs,
+		Notifier:        notifier,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("burnlink: %w", err)

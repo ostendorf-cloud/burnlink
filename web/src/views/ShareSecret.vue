@@ -25,9 +25,15 @@ const file = ref<File | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const passphrase = ref('')
 const lifetime = ref('')
+const notifyUrl = ref('')
 const sending = ref(false)
 const errorMessage = ref('')
-const link = ref<{ url: string; expiresAt: Date; protectedByPassphrase: boolean } | null>(null)
+const link = ref<{
+  url: string
+  expiresAt: Date
+  protectedByPassphrase: boolean
+  notified: boolean
+} | null>(null)
 const copied = ref(false)
 
 // The page asks the server for its limits once. Without them it still sends,
@@ -81,6 +87,9 @@ function messageFor(err: unknown): string {
   if (isApiError(err)) {
     if (err.status === 413) return 'This secret is too large to send.'
     if (err.status === 429) return 'Too many requests. Please wait a moment and try again.'
+    if (err.status === 400 && notifyUrl.value.trim() !== '') {
+      return 'The notification address was not accepted. Use a public https address on port 443, or leave it empty.'
+    }
   }
   return 'Could not send this secret. Please try again.'
 }
@@ -117,12 +126,14 @@ async function send() {
       return
     }
     const seconds = lifetime.value ? Number(lifetime.value) : undefined
-    const stored = await storeSecret(apiClient, payload, seconds)
+    const stored = await storeSecret(apiClient, payload, seconds, notifyUrl.value.trim())
     link.value = {
       url: secretURL(window.location.origin, stored.id, linkKey),
       expiresAt: stored.expiresAt,
       protectedByPassphrase: passphrase.value.length > 0,
+      notified: notifyUrl.value.trim() !== '',
     }
+    notifyUrl.value = ''
     // Nothing of the secret stays in the form once the link exists. The file
     // input is reset too, or it would keep the file and its name, and
     // picking the same file again would fire no change event.
@@ -187,6 +198,12 @@ async function copy() {
       <GovueField v-if="lifetimeOptions.length > 0" label="Expires after">
         <GovueSelect v-model="lifetime" :options="lifetimeOptions" />
       </GovueField>
+      <GovueField
+        label="Notify me when it is opened (optional webhook URL)"
+        hint="The server stores this address until the link is opened or expires, and so learns it, and who wants to know. When the link is opened, it sends one request there with the link's id and the time, never the secret. Delivery is tried a few times and is not guaranteed. Use a public https address on port 443."
+      >
+        <GovueInput v-model="notifyUrl" type="url" autocomplete="off" placeholder="https://" />
+      </GovueField>
 
       <GovueButton variant="primary" type="submit" :loading="sending">Create link</GovueButton>
     </form>
@@ -198,6 +215,9 @@ async function copy() {
       </p>
       <p v-if="link.protectedByPassphrase" class="text-text-muted">
         The recipient also needs the passphrase. Send it through a different channel.
+      </p>
+      <p v-if="link.notified" class="text-text-muted">
+        The server will call your webhook once when the link is opened, if it can.
       </p>
       <GovueInput :model-value="link.url" readonly aria-label="Secret link" />
       <GovueButton variant="secondary" @click="copy">{{
