@@ -51,7 +51,7 @@ const footerLinks = [{ href: '/security', label: 'How the encryption works' }]
 
 <template>
   <GovueSkipLink />
-  <GovueHeader>
+  <GovueHeader theme-switch>
     <template #brand>
       <a href="/" class="text-text">burnlink</a>
     </template>

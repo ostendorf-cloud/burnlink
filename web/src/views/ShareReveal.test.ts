@@ -4,7 +4,7 @@
 // The share and the reveal view together over an in-memory stand in for the
 // server: real crypto, real components, only the network call replaced.
 
-import { cleanup, render, screen, waitFor } from '@testing-library/vue'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/vue'
 import userEvent from '@testing-library/user-event'
 import { ApiError } from '@ostendorf-cloud/govue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -17,6 +17,7 @@ import ShareSecret from './ShareSecret.vue'
 vi.mock('../lib/secrets-api', () => ({
   getConfig: vi.fn(),
   storeSecret: vi.fn(),
+  checkSecret: vi.fn(),
   openSecret: vi.fn(),
 }))
 
@@ -27,7 +28,7 @@ vi.mock('../lib/crypto', async (importOriginal) => {
   return { ...actual, decryptSecret: vi.fn(actual.decryptSecret) }
 })
 
-import { getConfig, openSecret, storeSecret } from '../lib/secrets-api'
+import { checkSecret, getConfig, openSecret, storeSecret } from '../lib/secrets-api'
 
 const isZero = (b: Bytes) => b.every((x) => x === 0)
 
@@ -55,6 +56,7 @@ afterEach(() => {
 let server: Map<string, Bytes>
 let received: string[]
 let opens: number
+let checks: number
 
 function notFound() {
   return new ApiError({ code: 'not_found', message: 'secret not available', status: 404 })
@@ -64,6 +66,7 @@ beforeEach(() => {
   server = new Map()
   received = []
   opens = 0
+  checks = 0
   window.history.pushState({}, '', '/')
   vi.mocked(decryptSecret).mockClear()
   vi.mocked(getConfig).mockReset().mockRejectedValue(new Error('no config in this test'))
@@ -74,6 +77,13 @@ beforeEach(() => {
       server.set(id, payload)
       received.push(encodeBase64(payload) + ' ' + String(lifetime))
       return Promise.resolve({ id, expiresAt: new Date('2030-01-01T00:00:00Z') })
+    })
+  vi.mocked(checkSecret)
+    .mockReset()
+    .mockImplementation((_client, id) => {
+      checks++
+      // Looks, never takes.
+      return server.has(id) ? Promise.resolve() : Promise.reject(notFound())
     })
   vi.mocked(openSecret)
     .mockReset()
@@ -125,13 +135,22 @@ describe('share and reveal', () => {
     expect(atob(received[0].split(' ')[0])).not.toContain('correct horse')
 
     openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
     expect(await screen.findByTestId('revealed-text')).toHaveTextContent(
       'correct horse battery staple',
     )
     expect(server.size).toBe(0)
     // The spent link's key is gone from the address bar.
     expect(window.location.hash).toBe('')
+  })
+
+  it('puts keyboard focus on the new link once it exists', async () => {
+    render(ShareSecret)
+    await userEvent.type(screen.getByPlaceholderText('Type the secret here'), 'focus')
+    await userEvent.click(screen.getByRole('button', { name: 'Create link' }))
+
+    const input = await screen.findByLabelText('Secret link')
+    await waitFor(() => expect(input).toHaveFocus())
   })
 
   it('does not ask the server until the reveal button is clicked', async () => {
@@ -143,17 +162,122 @@ describe('share and reveal', () => {
     expect(server.size).toBe(1)
   })
 
-  it('opens a link exactly once', async () => {
+  it('opens a link exactly once for two holders who both saw it waiting', async () => {
     const url = await share('once')
     const first = openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    const second = openLink(url)
+    const firstView = within(first.container as HTMLElement)
+    const secondView = within(second.container as HTMLElement)
+    const firstButton = await firstView.findByRole('button', { name: 'Reveal the secret' })
+    const secondButton = await secondView.findByRole('button', { name: 'Reveal the secret' })
+    expect(checks).toBe(2)
+
+    await userEvent.click(firstButton)
+    expect(await firstView.findByTestId('revealed-text')).toHaveTextContent('once')
+
+    // The check said waiting, but the first holder took the secret meanwhile.
+    await userEvent.click(secondButton)
+    expect(await secondView.findByText('This secret is not available')).toBeVisible()
+    expect(secondView.queryByTestId('revealed-text')).not.toBeInTheDocument()
+    expect(opens).toBe(2)
+    expect(server.size).toBe(0)
+  })
+
+  it('tells a later visitor from the check that a spent link is gone', async () => {
+    const url = await share('once')
+    const first = openLink(url)
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
     await screen.findByTestId('revealed-text')
     first.unmount()
 
+    // The second visitor learns it is gone from the check, before any reveal.
     openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
     expect(await screen.findByText('This secret is not available')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Reveal the secret' })).not.toBeInTheDocument()
     expect(screen.queryByTestId('revealed-text')).not.toBeInTheDocument()
+    expect(opens).toBe(1)
+  })
+
+  it('shows that a secret is waiting without consuming it', async () => {
+    const url = await share('still here')
+    openLink(url)
+
+    expect(await screen.findByText('A secret is waiting')).toBeVisible()
+    expect(checks).toBe(1)
+    expect(opens).toBe(0)
+    expect(server.size).toBe(1)
+  })
+
+  it('does not ask the server about a link whose key is unusable', async () => {
+    const url = await share('keep me')
+    const id = new URL(url).pathname.split('/')[2]
+    window.history.pushState({}, '', '/s/' + id)
+    render(RevealSecretView, { props: { id } })
+
+    expect(await screen.findByText('This link could not be opened')).toBeVisible()
+    expect(checks).toBe(0)
+    expect(opens).toBe(0)
+  })
+
+  it('tells an unreachable server from a gone secret and checks again on request', async () => {
+    const url = await share('later')
+    vi.mocked(checkSecret).mockRejectedValueOnce(
+      new ApiError({ code: 'network', message: 'offline', status: 0 }),
+    )
+    openLink(url)
+
+    expect(await screen.findByText('Could not reach the server')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Reveal the secret' })).not.toBeInTheDocument()
+    expect(opens).toBe(0)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Check the link again' }))
+    expect(await screen.findByRole('button', { name: 'Reveal the secret' })).toBeVisible()
+    expect(opens).toBe(0)
+  })
+
+  it('does not open the secret when the rate limit refuses the check', async () => {
+    const url = await share('limited')
+    vi.mocked(checkSecret).mockRejectedValueOnce(
+      new ApiError({ code: 'too_many_requests', message: 'slow', status: 429 }),
+    )
+    openLink(url)
+
+    expect(await screen.findByText('Too many requests')).toBeVisible()
+    expect(opens).toBe(0)
+    expect(server.size).toBe(1)
+  })
+
+  it('moves focus to the result after a reveal and works with the keyboard alone', async () => {
+    const url = await share('keyboard')
+    openLink(url)
+
+    const button = await screen.findByRole('button', { name: 'Reveal the secret' })
+    await userEvent.tab()
+    // The first tab stop of the view is the button.
+    expect(button).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+
+    const heading = await screen.findByRole('heading', { name: 'Your secret' })
+    await waitFor(() => expect(heading).toHaveFocus())
+    // The secret text is a focusable region, so a long one can be scrolled.
+    expect(screen.getByRole('region', { name: 'Secret text' })).toHaveAttribute('tabindex', '0')
+  })
+
+  it('submits the passphrase with Enter and puts focus back in the field after a wrong one', async () => {
+    const url = await share('guarded', 'open sesame')
+    openLink(url)
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
+
+    const field = await screen.findByLabelText('Passphrase')
+    await waitFor(() => expect(field).toHaveFocus())
+    await userEvent.keyboard('wrong{Enter}')
+    expect(await screen.findByText('The passphrase or the link is wrong.')).toBeVisible()
+    await waitFor(() => expect(field).toHaveFocus())
+
+    await userEvent.clear(field)
+    await userEvent.keyboard('open sesame{Enter}')
+    expect(await screen.findByTestId('revealed-text')).toHaveTextContent('guarded')
+    expect(opens).toBe(1)
   })
 
   it('refuses a link with no key or a mangled key without spending the secret', async () => {
@@ -167,6 +291,7 @@ describe('share and reveal', () => {
       expect(screen.queryByRole('button', { name: 'Reveal the secret' })).not.toBeInTheDocument()
       view.unmount()
     }
+    expect(checks).toBe(0)
     expect(opens).toBe(0)
     expect(server.size).toBe(1)
   })
@@ -176,7 +301,7 @@ describe('share and reveal', () => {
     const u = new URL(url)
     const wrong = u.origin + u.pathname + '#' + 'A'.repeat(43)
     openLink(wrong)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
 
     expect(await screen.findByText('The secret could not be decrypted')).toBeVisible()
     expect(screen.queryByTestId('revealed-text')).not.toBeInTheDocument()
@@ -185,7 +310,7 @@ describe('share and reveal', () => {
   it('needs the passphrase, keeps the payload for a retry, then reveals', async () => {
     const url = await share('guarded', 'open sesame')
     openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
 
     const field = await screen.findByLabelText('Passphrase')
     await userEvent.type(field, 'wrong')
@@ -207,7 +332,7 @@ describe('share and reveal', () => {
       new ApiError({ code: 'network', message: 'offline', status: 0 }),
     )
     openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
 
     expect(await screen.findByText('Could not reach the server')).toBeVisible()
   })
@@ -218,7 +343,7 @@ describe('share and reveal', () => {
     const url = await shareFile(file)
 
     openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
     const link = await screen.findByTestId('revealed-file')
     expect(link).toHaveAttribute('download', '.._evil_<b>name.txt')
     expect(link.getAttribute('download')).not.toMatch(/[\\/]/)
@@ -231,7 +356,7 @@ describe('share and reveal', () => {
     const bidi = '‪‫‬‭‮⁦⁧⁨⁩'
     const url = await shareFile(new File([new Uint8Array([1])], `evil${bidi}txt.exe`))
     openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
     expect(await screen.findByTestId('revealed-file')).toHaveAttribute('download', 'eviltxt.exe')
     cleanup()
 
@@ -239,7 +364,7 @@ describe('share and reveal', () => {
     const long = 'a'.repeat(300) + '.txt'
     const url2 = await shareFile(new File([new Uint8Array([1])], long))
     openLink(url2)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
     const name = (await screen.findByTestId('revealed-file')).getAttribute('download') ?? ''
     expect(name).toHaveLength(120)
     expect(name).toBe('a'.repeat(120))
@@ -248,7 +373,7 @@ describe('share and reveal', () => {
   it('drops the key and the payload once the secret is shown', async () => {
     const url = await share('wipe me')
     openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
     expect(await screen.findByTestId('revealed-text')).toHaveTextContent('wipe me')
 
     const { payload, key } = lastDecryptArgs()
@@ -261,7 +386,7 @@ describe('share and reveal', () => {
     const { revokeObjectURL } = stubObjectURLs()
     const url = await shareFile(new File([new Uint8Array([7, 7, 7])], 'a.bin'))
     const view = openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
     await screen.findByTestId('revealed-file')
     const content = (await vi.mocked(decryptSecret).mock.results[0].value) as Content
     if (content.type !== 'file') throw new Error('expected a file')
@@ -276,7 +401,7 @@ describe('share and reveal', () => {
     const { revokeObjectURL } = stubObjectURLs()
     const url = await shareFile(new File([new Uint8Array([7, 7, 7])], 'a.bin'))
     openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
     await screen.findByTestId('revealed-file')
     const content = (await vi.mocked(decryptSecret).mock.results[0].value) as Content
     if (content.type !== 'file') throw new Error('expected a file')
@@ -292,7 +417,7 @@ describe('share and reveal', () => {
   it('drops the text on pagehide and the buffers held for a passphrase retry', async () => {
     const url = await share('hidden text', 'pw')
     openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
     await screen.findByLabelText('Passphrase')
     const { payload, key } = lastDecryptArgs()
     expect(isZero(key)).toBe(false)
@@ -309,7 +434,7 @@ describe('share and reveal', () => {
   it('removes a shown text from the page on pagehide', async () => {
     const url = await share('shown text')
     openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
     expect(await screen.findByTestId('revealed-text')).toBeVisible()
 
     window.dispatchEvent(new Event('pagehide'))
@@ -321,7 +446,7 @@ describe('share and reveal', () => {
   it('wipes a page restored from the bfcache and ignores a normal pageshow', async () => {
     const url = await share('restored')
     openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
     expect(await screen.findByTestId('revealed-text')).toBeVisible()
 
     window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: false }))
@@ -335,7 +460,7 @@ describe('share and reveal', () => {
     const url = await share('guarded', 'open sesame')
     const u = new URL(url)
     openLink(u.origin + u.pathname + '#' + 'A'.repeat(43))
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
 
     await userEvent.type(await screen.findByLabelText('Passphrase'), 'open sesame')
     await userEvent.click(screen.getByRole('button', { name: 'Open' }))
@@ -360,7 +485,7 @@ describe('share and reveal', () => {
     const url = await share('<img src=x onerror=alert(1)>')
     expect(screen.queryByPlaceholderText('Type the secret here')).not.toBeInTheDocument()
     const view = openLink(url)
-    await userEvent.click(screen.getByRole('button', { name: 'Reveal the secret' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal the secret' }))
     const shown = await screen.findByTestId('revealed-text')
     expect(shown.textContent).toBe('<img src=x onerror=alert(1)>')
     expect(view.container.querySelector('img')).toBeNull()

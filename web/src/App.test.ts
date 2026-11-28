@@ -33,6 +33,17 @@ describe('App', () => {
     ).toBeVisible()
   })
 
+  it('offers the theme switch on every app page', () => {
+    for (const path of ['/', '/security', '/r/abc', '/s/abc']) {
+      window.history.pushState({}, '', path)
+      const { unmount } = render(App)
+
+      const group = screen.getByRole('radiogroup')
+      expect(within(group).getAllByRole('radio')).toHaveLength(3)
+      unmount()
+    }
+  })
+
   it('links the security page from the header and the footer', () => {
     render(App)
 

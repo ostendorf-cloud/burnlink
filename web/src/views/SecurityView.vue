@@ -178,7 +178,8 @@ version │ flags │ salt (16, only with a passphrase) │ iv (12) │ cipherte
           people open at the same moment, exactly one of them gets it.
         </li>
         <li>
-          The page behind a link asks you to press a button before it opens the secret. A chat
+          The page behind a link first asks the server whether the secret is still there. That check
+          takes nothing. The page then asks you to press a button before it opens the secret. A chat
           program or a preview service that only loads the page does not use the link up.
         </li>
         <li>

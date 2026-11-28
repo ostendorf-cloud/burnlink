@@ -60,8 +60,9 @@
   readiness reports the store.
 - The sender's page encrypts under a fresh 32 byte link key, stores the payload and shows
   `/s/<id>#<key>`. The recipient's page at `/s/<id>` checks that the fragment holds a valid key,
-  then waits for a click before it calls the open endpoint, so a preview that loads the page does
-  not burn the link. It decrypts in the browser and strips the key from the address bar. The
+  then asks the check endpoint whether the secret is still there, which takes nothing. It waits
+  for a click before it calls the open endpoint, so a preview that loads the page does not burn
+  the link. It decrypts in the browser and strips the key from the address bar. The
   server has already deleted the secret by then, so a passphrase is asked for after the fetch and
   the payload is kept in the page's memory for retries. Closing the page loses the secret.
   The recipient's browser history still records `/s/<id>#<key>` when the page loads, and
